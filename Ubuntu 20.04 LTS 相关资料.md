@@ -7,4 +7,4 @@ Ubuntu 20.04 LTS 相关资料
 3. [gnome美化](https://juejin.cn/post/6875280250939375624)
 4. [开机执行脚本](https://www.jianshu.com/p/3be1a8cbfa6f)(写rc.local记得加上`#!/bin/bash`)
 5. [开机模式设置 字符界面和图形界面的切换](https://blog.csdn.net/Jailman/article/details/116301693)
-6. 
+6. [tty3~6命令行模式中文乱码](https://www.jb51.net/os/Ubuntu/367166.html)，zhcon需要将用户添加到video用户组
