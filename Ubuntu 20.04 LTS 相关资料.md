@@ -32,7 +32,7 @@ Ubuntu 20.04 LTS 相关资料
 
 	该软链接的目的是为了让系统在启动时通过 `/etc/systemd/system/` 读取到 `rc.local.service`
 
-5. [开机模式设置 字符界面和图形界面的切换](https://blog.csdn.net/Jailman/article/details/116301693)
+5. 可以在登录页面按下 `ctrl+alt+f3~f6` 进入命令行模式
 6. [tty3~6命令行模式中文乱码](https://www.jb51.net/os/Ubuntu/367166.html)，zhcon需要将用户添加到video用户组
 7. ls -al 执行后的内容意义(例如`[-rwxr-x-r] [1] [rick] [rick] [4096] [Jan 1 16:44] [README.md]`)
 	- 文件权限`[-][rwx][rwx][rwx]`,四个中括号分别代表`[文件类型][文件所有者的权限][同一用户组的权限][其他用户的权限]`
