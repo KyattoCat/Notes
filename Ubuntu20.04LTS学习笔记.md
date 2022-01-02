@@ -38,8 +38,10 @@ Ubuntu 20.04 LTS 相关资料
 6. [tty2~6命令行模式中文乱码](https://www.jb51.net/os/Ubuntu/367166.html)
 	
 	使用 `sudo apt install zhcon` 安装zhcon
+
 	然后将用户添加到video用户组,注销后重新登临,执行 `zhcon --utf8`
 7. ls -al 执行后的内容意义(例如`[-rwxr-x-r] [1] [rick] [rick] [4096] [Jan 1 16:44] [README.md]`)
+
 	- 文件权限`[-][rwx][rwx][rwx]`,四个中括号分别代表`[文件类型][文件所有者的权限][同一用户组的权限][其他用户的权限]`
 	- 连接 理解为有多少个文件和这个文件有关,比如文件夹dev里面有三个文件,那么连接数量就为3
 	- 所属帐号
@@ -47,7 +49,9 @@ Ubuntu 20.04 LTS 相关资料
 	- 文件大小,单位为B
 	- 修改日期
 	- 文件名
+
 8. tar指令常用参数
+
 	```
 	-c 创建新的压缩文件
 	-x 解压缩
@@ -59,6 +63,9 @@ Ubuntu 20.04 LTS 相关资料
 	-v 在压缩/解压缩时显示正在操作中的文件
 	
 	```
+
 	压缩 `tar -zcv -f dev.tar.gz /home/root/dev`
+
 	解压缩 `tar -zxv -f dev.tar.gz -C /home/root/dev`
+
 	查看 `tar -ztv -f dev.tar.gz`
