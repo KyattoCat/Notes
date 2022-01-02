@@ -44,3 +44,18 @@ Ubuntu 20.04 LTS 相关资料
 	- 文件大小,单位为B
 	- 修改日期
 	- 文件名
+8. tar指令常用参数
+	```
+	-c 创建新的压缩文件
+	-x 解压缩
+	-C 解压缩时指定路径
+	-t 查看压缩文件内的文件名
+	-f [filename] 指定压缩文件名
+	-j bzip2压缩,后缀最好为.tar.bz2
+	-z gzip压缩,后缀最好为.tar.gz(常用)
+	-v 在压缩/解压缩时显示正在操作中的文件
+	
+	```
+	压缩 `tar -zcv -f dev.tar.gz /home/root/dev`
+	解压缩 `tar -zxv -f dev.tar.gz -C /home/root/dev`
+	查看 `tar -ztv -f dev.tar.gz`
