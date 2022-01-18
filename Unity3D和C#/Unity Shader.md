@@ -1,6 +1,6 @@
 # Unity Shader
 
-## 空间
+## 1. 空间
 
 - 模型空间
 
@@ -22,9 +22,9 @@
 
   
 
-## Unity Shader基础使用
+## 2. Unity Shader基础使用
 
-### 基础
+### 2.1 基础
 
 ```CG
 #pragma vertex vert
@@ -65,7 +65,7 @@ float4 frag() : SV_TARGET
 
 本例中返回的是一个表示白色的 `fixed4` 类型的变量。
 
-### 顶点着色器多属性输入
+### 2.2 顶点着色器多属性输入
 
 ```
 // 使用结构体定义顶点着色器的输入
@@ -99,7 +99,7 @@ struct StructName
 };
 ```
 
-### 顶点着色器与片元着色器之间传递信息
+### 2.3 顶点着色器与片元着色器之间传递信息
 
 ```
 // 使用结构体定义顶点着色器的输入
@@ -140,9 +140,42 @@ float4 frag(a2f i) : SV_TARGET
 }
 ```
 
-如上所示，定义了一个新结构体`a2f`用于顶点着色器与片元着色器之间传递信息，
+如上所示，定义了一个新结构体`a2f`用于顶点着色器与片元着色器之间传递信息，其中用于传递信息的结构体中必须含有`SV_POSITION`语义指定的变量，否则片元着色器无法获得裁剪空间中的顶点坐标，也就无法将顶点渲染到屏幕上。
 
+顶点着色器是逐顶点调用的，而片元着色器是逐片元调用的，因此片元着色器中的输入实际上是把顶点着色器的输出进行插值后得到的结果？
 
+### 2.4 使用属性（Properties块）
+
+通过属性，我们可以随时调整材质的效果，参数需要写在Properties语义块中。
+
+```
+Properties
+{
+    // 声明一个Color类型的属性
+    _Color ("Color Hint", Color) = (1.0, 1.0, 1.0, 1.0)
+}
+```
+
+同时，我们需要在CG代码块中添加与其相匹配的变量（同名且同类型），匹配关系见该节附表
+
+````
+// 在Properties中声明的属性也需要在CG代码块中定义一个名称和类型都相同的变量
+fixed4 _Color;
+````
+
+为了显示效果，修改片元着色器代码：
+
+```
+float4 frag(a2f i) : SV_TARGET
+{
+    fixed3 c = i.color;
+    c *= _Color.rgb;
+
+    return fixed4(c, 1.0);
+}
+```
+
+### 附表
 
 常见矩阵及其用法如下表（可能会被`Unity Shader`自动升级为其他的函数实现）：
 
@@ -158,13 +191,13 @@ float4 frag(a2f i) : SV_TARGET
 |   `_Object2World`    | 当前的模型矩阵，用于将顶点/矢量从模型空间变换到世界空间      |
 |   `_World2Object`    | `_Object2World`的逆矩阵，用于将顶点/矢量从世界空间变换到模型空间 |
 
-Unity支持的语义：
+ShaderLab中属性的类型和CG中变量之间的匹配关系：
 
-- `POSITION`
-- `SV_POSITION`
-- `TANGENT`
-- `NORMAL`
-- `TEXCOORD[0-3]`
-- `COLOR`
+| ShaderLab属性类型 | CG变量类型            |
+| ----------------- | --------------------- |
+| Color, Vector     | float4, half4, fixed4 |
+| Range, Float      | float, half, fixed    |
+| 2D                | sampler2D             |
+| Cube              | samplerCube           |
+| 3D                | sampler3D             |
 
-等等等等……
