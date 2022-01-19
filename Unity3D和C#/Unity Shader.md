@@ -4,43 +4,45 @@
 
 - 模型空间
 
-  以该模型自身中心为原点的坐标系
+  以该模型自身中心为原点的坐标系，比如一个prefab点进去，显示的坐标系就是模型空间。
+
+  <img src="D:\Notes\Unity3D和C#\images\Unity Shader\模型空间.png" alt="模型空间"  />
 
 - 世界空间
 
-  绝对坐标系
+  绝对坐标系。
 
 - 观察空间
 
-  其实就是摄像机空间，以摄像机作为原点，但是是右手坐标系，z轴正方向指向屏幕外
+  其实就是摄像机空间，以摄像机作为原点，但是是右手坐标系，z轴正方向指向屏幕外。
 
 - 裁剪空间
 
-  
+  摄像机有两种投影方式，透视和正交，其视锥体不同。通过投影矩阵可以将观察空间内的点转换到方块形状的裁剪空间。
 
 - 屏幕空间
 
   
 
-## 2. Unity Shader基础使用
+## 2. Unity Shader 基础使用
 
 ### 2.1 基础
 
-```CG
+```c
 #pragma vertex vert
 #pragma fragment frag
 ```
 
 这两行编译指令指定了哪个函数包含顶点着色器的代码，哪个函数包含了片元着色器的代码。更加通用的编译指令如下：
 
-```CG
+```c
 #pragma vertex name
 #pragma fragment name
 ```
 
 其中 `name` 为自定义的函数名。
 
-```CG
+```c
 float4 vert(float4 v : POSITION) : SV_POSITION
 {
 	return mul(UNITY_MATRIX_MVP, v);
@@ -54,7 +56,7 @@ float4 vert(float4 v : POSITION) : SV_POSITION
 
 `POSITION` 和 `SV_POSITION` 都是 `CG/HLSL` 中的语义，大概就是指定这个值是什么。
 
-```CG
+```c
 float4 frag() : SV_TARGET
 {
 	return fixed4(1.0, 1.0, 1.0, 1.0);
@@ -67,7 +69,7 @@ float4 frag() : SV_TARGET
 
 ### 2.2 顶点着色器多属性输入
 
-```
+```c
 // 使用结构体定义顶点着色器的输入
 struct a2v
 {
@@ -90,7 +92,7 @@ float4 vert(a2v v) : SV_POSITION
 
 定义结构体时，语义是必须的，因此结构体格式将如下所示：
 
-```
+```c
 struct StructName
 {
 	Type Name : Semantic;
@@ -101,7 +103,7 @@ struct StructName
 
 ### 2.3 顶点着色器与片元着色器之间传递信息
 
-```
+```c
 // 使用结构体定义顶点着色器的输入
 struct a2v
 {
@@ -148,7 +150,7 @@ float4 frag(a2f i) : SV_TARGET
 
 通过属性，我们可以随时调整材质的效果，参数需要写在Properties语义块中。
 
-```
+```c
 Properties
 {
     // 声明一个Color类型的属性
@@ -158,14 +160,14 @@ Properties
 
 同时，我们需要在CG代码块中添加与其相匹配的变量（同名且同类型），匹配关系见该节附表
 
-````
+````c
 // 在Properties中声明的属性也需要在CG代码块中定义一个名称和类型都相同的变量
 fixed4 _Color;
 ````
 
 为了显示效果，修改片元着色器代码：
 
-```
+```c
 float4 frag(a2f i) : SV_TARGET
 {
     fixed3 c = i.color;
@@ -175,7 +177,36 @@ float4 frag(a2f i) : SV_TARGET
 }
 ```
 
-### 附表
+### 2.5 Unity Shader 内置文件
+
+Unity中存在一些有用的类似头文件的文件，其后缀名为`.cginc`
+
+常用的文件：
+
+- UnityCG.cginc，包含经常使用的函数、宏和结构体等。
+- UnityShaderVariables.cginc，包含很多内置的全局变量，如UNITY_MATRIX_MVP等。
+- Lighting.cginc，包含了各种内置的光照模型，如果Shader文件是Surface Shader的话会自动包含。
+- HLSLSupport.cginc，自动包含，用于跨平台编译。
+
+### 2.6 Unity CG/HLSL语义
+
+语义实际上就是一个赋给Shader输入和输出的字符串，这个字符串表达了这个参数的含义。
+
+个人理解就是，这个变量本身存储了什么Shader流水线是不关心的，我们可以通过语义自行决定这个变量的用途。
+
+而Unity为了方便模型数据的传输，对一些语义进行了特殊的规定。
+
+比如`TEXCOORD0`作为顶点着色器的参数语义输入时，Unity会把模型的第一组纹理坐标填充进去。
+
+但比如当`TEXCOORD0`作为顶点着色器的输出时则没有了特殊含义。
+
+在Dx10之后，有一种新的语义类型出现，即系统数值语义（`system-value semantics`，以下简称SV语义），对，`SV_`开头的`SV_POSITION`就是系统数值语义。
+
+SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变量不可以被随意修改，因为流水线需要使用这些变量来完成特定的目的。
+
+在某些平台上，必须使用SV语义才能让Shader正常工作，所以我们应该尽量使用SV语义对变量进行修饰，让Shader有更好的跨平台性。
+
+### 2.A 附表
 
 常见矩阵及其用法如下表（可能会被`Unity Shader`自动升级为其他的函数实现）：
 
@@ -201,3 +232,35 @@ ShaderLab中属性的类型和CG中变量之间的匹配关系：
 | Cube              | samplerCube           |
 | 3D                | sampler3D             |
 
+UnityCG.cginc中常用的结构体：
+
+| 名称         | 描述           | 包含的变量                                       |
+| ------------ | -------------- | ------------------------------------------------ |
+| appdata_base | 顶点着色器输入 | 顶点位置，顶点法线，第一组纹理坐标               |
+| appdata_tan  | 顶点着色器输入 | 顶点位置，顶点切线，顶点法线，第一组纹理坐标     |
+| appdata_full | 顶点着色器输入 | 顶点位置，顶点切线，顶点法线，四组或更多纹理坐标 |
+| appdata_img  | 顶点着色器输入 | 顶点位置，第一组纹理坐标                         |
+| v2f_img      | 顶点着色器输出 | 裁剪空间中的位置，纹理坐标                       |
+
+应用阶段传递给顶点着色器时Unity支持的常用语义：
+
+| 语义      | 描述                                                         |
+| --------- | ------------------------------------------------------------ |
+| POSITION  | 模型空间中的顶点位置，通常是float4类型                       |
+| NORMAL    | 顶点法线，通常是float3类型                                   |
+| TANGENT   | 顶点切线，通常是float4类型                                   |
+| TEXCOORDn | TEXCOORD0表示第一组纹理坐标，以此类推，通常是float2或float4类型 |
+| COLOR     | 顶点颜色，通常是fixed4或float4类型                           |
+
+从顶点着色器传递到片元着色器时Unity支持的常用语义：
+
+| 语义        | 描述                                                         |
+| ----------- | ------------------------------------------------------------ |
+| SV_POSITION | 裁剪空间中的顶点坐标，结构体中必须包含一个使用该语义修饰的变量。等同于Dx9中的POSITION，但最好还是用这个 |
+| COLOR0      | 通常用于输出第一组顶点颜色                                   |
+| COLOR1      | 通常用于输出第二组顶点颜色                                   |
+| TEXCOORDn   | 通常用于输出纹理坐标                                         |
+
+片元着色器输出时Unity支持的常用语义：
+
+- SV_Target，输出值将会存储到渲染目标中（render target）
