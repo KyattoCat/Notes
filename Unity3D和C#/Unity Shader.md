@@ -6,7 +6,7 @@
 
   以该模型自身中心为原点的坐标系，比如一个prefab点进去，显示的坐标系就是模型空间。
 
-  <img src=".\images\Unity Shader\模型空间.png" alt="模型空间"  />
+  ![1](images/Unity Shader/1.png)
 
 - 世界空间
 
@@ -22,7 +22,6 @@
 
 - 屏幕空间
 
-  
 
 ## 2. Unity Shader 基础使用
 
@@ -280,7 +279,7 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 在Shader中，只需要使用Unity的内置变量`UNITY_LIGHTMODEL_AMBIENT`就可以获取环境光，而大多数物体是没有自发光的，如果要计算自发光也很简单，只要在片元着色器输出最后的颜色之前，将自发光颜色添加上去即可。
 
-<img src=".\images\Unity Shader\环境光设置.png" alt="环境光" style="zoom: 80%;" />
+![环境光设置](images/Unity Shader/环境光设置.png)
 
 ### 3.A 附表
 
@@ -337,7 +336,7 @@ float4 _MainTex_ST;
 
 在Unity中导入一张纹理资源后，可以在Inspector面板上调整属性。
 
-![](.\images\Unity Shader\纹理属性.png)
+![纹理属性](images\Unity Shader\纹理属性.png)
 
 需要关注的是拼接模式和过滤模式，拼接模式决定了当纹理采样坐标超过[0, 1]范围后如何进行采样，过滤模式决定当纹理被拉伸时使用的滤波方式，其中有点、双线性和三线性三种，越靠后滤波效果越好。
 
@@ -458,7 +457,7 @@ Pass
 
 决定一个光源使用哪种处理模式取决于光源的类型和渲染模式。类型指的是平行光或者其他类型的光源，渲染模式指的是她是否是重要的，重要的光源将会被当作逐像素光源处理，如图所示：
 
-![光源渲染模式](.\images\Unity Shader\光源渲染模式.png)
+![光源渲染模式](images\Unity Shader\光源渲染模式.png)
 
 在前向渲染中，当我们渲染一个物体时，Unity会根据场景中各个光源的设置以及这些光源对物体的影响程度对这些光源进行一个重要度排序，其中一定数目的光源会被当做逐像素光源处理，最多有4个光源被逐顶点处理，剩下的按SH方式处理。Unity对光源的判断规则如下：
 
@@ -469,7 +468,7 @@ Pass
 
 前向渲染的两种Pass的设置和**通常的**光照计算如图所示：
 
-![前向渲染的两种Pass](.\images\Unity Shader\前向渲染的两种Pass.png)
+![前向渲染的两种Pass](images/Unity Shader/前向渲染的两种Pass.png)
 
 需要注意的是除了设置标签以外，还需要添加相应的编译指令`#pragma multi_compile_fwdbase`等。
 
@@ -767,11 +766,11 @@ Shader "Custom/ForwardRendering"
 
 每一步执行的效果可以通过帧调试器查看，帧调试器打开位置如下图所示：
 
-<img src=".\images\Unity Shader\帧调试器窗口打开位置.png" alt="帧调试器打开位置" style="zoom:67%;" />
+![帧调试器打开位置](images/Unity Shader/帧调试器窗口打开位置.png)
 
 通过帧调试器可以看出，Base Pass只执行了一次，而Additional Pass执行了两次，且顺序为红点光源到绿点光源，这是由于Unity对光源的重要程度进行排序的结果，但我们并不知道Unity具体是如何排序的。
 
-![帧调试结果](.\images\Unity Shader\帧调试结果.png)
+![帧调试结果](images/Unity Shader/帧调试结果.png)
 
 #### 5.2.3 Unity中的光照衰减
 
@@ -839,3 +838,4 @@ fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_
 > 剪影是一个蒙版，您可以将其放置在光源上，以创建具有特定形状或颜色的阴影，从而改变光源的外观和强度。Cookie 是一种模拟复杂光照效果的有效方式，对运行时性能的影响微乎其微。您可以使用剪影模拟的效果包括焦散、柔和阴影和光源形状。
 
 还没学到，之后再看
+
