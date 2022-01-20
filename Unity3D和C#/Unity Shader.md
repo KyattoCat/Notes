@@ -6,7 +6,7 @@
 
   以该模型自身中心为原点的坐标系，比如一个prefab点进去，显示的坐标系就是模型空间。
 
-  <img src="D:\Notes\Unity3D和C#\images\Unity Shader\模型空间.png" alt="模型空间"  />
+  <img src=".\images\Unity Shader\模型空间.png" alt="模型空间"  />
 
 - 世界空间
 
@@ -280,7 +280,7 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 在Shader中，只需要使用Unity的内置变量`UNITY_LIGHTMODEL_AMBIENT`就可以获取环境光，而大多数物体是没有自发光的，如果要计算自发光也很简单，只要在片元着色器输出最后的颜色之前，将自发光颜色添加上去即可。
 
-<img src="D:\Notes\Unity3D和C#\images\Unity Shader\环境光设置.png" alt="环境光" style="zoom: 80%;" />
+<img src=".\images\Unity Shader\环境光设置.png" alt="环境光" style="zoom: 80%;" />
 
 ### 3.A 附表
 
@@ -337,7 +337,7 @@ float4 _MainTex_ST;
 
 在Unity中导入一张纹理资源后，可以在Inspector面板上调整属性。
 
-![](D:\Notes\Unity3D和C#\images\Unity Shader\纹理属性.png)
+![](.\images\Unity Shader\纹理属性.png)
 
 需要关注的是拼接模式和过滤模式，拼接模式决定了当纹理采样坐标超过[0, 1]范围后如何进行采样，过滤模式决定当纹理被拉伸时使用的滤波方式，其中有点、双线性和三线性三种，越靠后滤波效果越好。
 
@@ -431,7 +431,7 @@ Pass
 
 决定一个光源使用哪种处理模式取决于光源的类型和渲染模式。类型指的是平行光或者其他类型的光源，渲染模式指的是她是否是重要的，重要的光源将会被当作逐像素光源处理，如图所示：
 
-![光源渲染模式](D:\Notes\Unity3D和C#\images\Unity Shader\光源渲染模式.png)
+![光源渲染模式](.\images\Unity Shader\光源渲染模式.png)
 
 在前向渲染中，当我们渲染一个物体时，Unity会根据场景中各个光源的设置以及这些光源对物体的影响程度对这些光源进行一个重要度排序，其中一定数目的光源会被当做逐像素光源处理，最多有4个光源被逐顶点处理，剩下的按SH方式处理。Unity对光源的判断规则如下：
 
@@ -442,7 +442,7 @@ Pass
 
 前向渲染的两种Pass的设置和**通常的**光照计算如图所示：
 
-![前向渲染的两种Pass](D:\Notes\Unity3D和C#\images\Unity Shader\前向渲染的两种Pass.png)
+![前向渲染的两种Pass](.\images\Unity Shader\前向渲染的两种Pass.png)
 
 需要注意的是除了设置标签以外，还需要添加相应的编译指令`#pragma multi_compile_fwdbase`等。
 
@@ -460,7 +460,7 @@ Pass
 
 顶点照明渲染路径我估计不会去使用了，其中可以使用的内置变量和内置函数就不列出来了，在这里截个图：
 
-<img src="D:\Notes\Unity3D和C#\images\Unity Shader\顶点照明渲染路径可以使用的内置.png" style="zoom: 80%;" />
+<img src=".\images\Unity Shader\顶点照明渲染路径可以使用的内置.png" style="zoom: 80%;" />
 
 #### 5.1.3 延迟渲染路径
 
@@ -538,6 +538,213 @@ Pass 2
 - 深度+模板缓冲
 
 延迟渲染路径可以使用的内置变量见[附表](#延迟渲染路径可以使用的内置变量)
+
+### 5.2 Unity的光源类型
+
+Unity一共支持4种光源类型：
+
+1. 平行光（定向光）
+2. 点光源
+3. 聚光灯
+4. 区域光（面光源）
+
+#### 5.2.1 光源类型的影响
+
+最常用的光源属性有：
+
+- 光源的位置
+- 光源的方向（更准确的说是，到某点的方向）
+- 光源的颜色
+- 强度
+- 衰减（到某点的衰减）
+
+以下对三种光源类型进行分类讨论（区域光不在讨论范围内）：
+
+1. 平行光：她的几何定义是最简单的。平行光可以照亮的范围是没有限制的，通常作为类似太阳的角色出现。平行光的几何属性只有方向，且光照强度不会随距离衰减。
+2. 点光源：她的照亮空间是由空间中的一个球体定义的，她表示由一个点发出的，向所有方向延申的光。点光源是有位置属性的，同时光照强度是会随距离衰减的，衰减值可以由一个函数定义。
+3. 聚光灯：她的照亮空间是一个空间内的锥形区域定义的，是由一个点出发，向特定方向延申的光。她即有位置属性，也有旋转属性，还有衰减属性。
+
+#### 5.2.2 如何在Shader中处理不同的光源类型
+
+```c
+Shader "Custom/ForwardRendering"
+{
+    Properties
+    {
+        _Diffuse ("Diffuse", Color) = (1, 1, 1, 1)
+        _Specular ("Specular", Color) = (1, 1, 1, 1)
+        _Gloss ("Gloss", Range(8.0, 256)) = 20
+    }
+
+    SubShader
+    {
+        Pass
+        {
+            Tags
+            {
+                "LightMode" = "ForwardBase"
+            }
+
+
+            CGPROGRAM
+            
+            #pragma multi_compile_fwdbase
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Lighting.cginc"
+
+            fixed4 _Diffuse;
+            fixed4 _Specular;
+            float _Gloss;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float3 worldNormal : TEXCOORD;
+                float3 worldPos : TEXCOORD1;
+            };
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+                // 坐标空间转换
+				o.pos = UnityObjectToClipPos(v.vertex);
+
+                // 将模型法线转换到世界坐标下 法线是33矩阵 所以截取WorldToObject的前三行列
+                o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
+
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                // 环境光
+                fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+                fixed3 worldNormal = normalize(i.worldNormal);
+                // 世界坐标下的光源方向 _WorldSpaceLightPos0仅适用于世界有且仅有一个平行光源的情况
+                fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz);
+
+                // fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLight));
+                fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * max(0, dot(worldNormal, worldLight));
+
+
+                fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos);
+                fixed3 halfDir = normalize(worldLight + viewDir);
+
+                fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(max(0, dot(worldNormal, halfDir)), _Gloss);
+
+                // 这个Pass仅执行一次 且光源类型一定是平行光 平行光没有衰减
+                fixed atten = 1.0;
+                fixed3 color = ambient + (diffuse + specular) * atten;
+
+
+                return fixed4(color, 1.0);
+            }
+            ENDCG
+
+        }
+
+        Pass
+        {
+            Tags {"LightMode"="ForwardAdd"}
+            Blend One One
+
+            CGPROGRAM
+            #pragma multi_compile_fwdadd
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+            fixed4 _Diffuse;
+            fixed4 _Specular;
+            float _Gloss;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float3 worldNormal : TEXCOORD;
+                float3 worldPos : TEXCOORD1;
+            };
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+                // 坐标空间转换
+				o.pos = UnityObjectToClipPos(v.vertex);
+
+                // 将模型法线转换到世界坐标下 法线是33矩阵 所以截取WorldToObject的前三行列
+                o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
+
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                // 环境光
+                fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+                fixed3 worldNormal = normalize(i.worldNormal);
+// 判断当前处理的逐像素光源类型 非定向光还需要进行向量减法获取光源方向
+#ifdef USING_DIRECTIONAL_LIGHT
+                fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz);
+#else
+                fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz - i.worldPos.xyz);
+#endif
+                // fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLight));
+                fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * max(0, dot(worldNormal, worldLight));
+
+
+                fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos);
+                fixed3 halfDir = normalize(worldLight + viewDir);
+
+                fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(max(0, dot(worldNormal, halfDir)), _Gloss);
+
+#ifdef USING_DIRECTIONAL_LIGHT
+                fixed atten = 1.0;
+#else
+                float3 lightCoord = mul(unity_WorldToLight, float4(i.worldPos, 1)).xyz;
+                fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_CHANNEL;
+#endif
+                fixed3 color = ambient + (diffuse + specular) * atten;
+
+
+                return fixed4(color, 1.0);
+            }
+            ENDCG
+        }
+    }
+    Fallback "Specular"
+}
+
+```
+
+每一步执行的效果可以通过帧调试器查看，帧调试器打开位置如下图所示：
+
+<img src=".\images\Unity Shader\帧调试器窗口打开位置.png" alt="帧调试器打开位置" style="zoom:67%;" />
+
+通过帧调试器可以看出，Base Pass只执行了一次，而Additional Pass执行了两次，且顺序为红点光源到绿点光源，这是由于Unity对光源的重要程度进行排序的结果，但我们并不知道Unity具体是如何排序的。
+
+![帧调试结果](.\images\Unity Shader\帧调试结果.png)
 
 ### 5.A 附表
 
