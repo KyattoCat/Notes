@@ -1,6 +1,140 @@
 # Unity Shader
 
-## 1. 空间
+## 1. 基础
+
+### 1.1 渲染流水线
+
+渲染流水线的工作任务在于，由一个三维场景出发，生成（或者说渲染）一张二维图像。
+
+渲染流程分为3个阶段：
+
+1. 应用阶段
+2. 几何阶段
+3. 光栅化阶段
+
+其中每个阶段本身也是一个流水线系统。
+
+#### 1.1.1 应用阶段
+
+应用阶段开发者主要有三个任务：
+
+1. 准备好场景数据（摄像机位置、视锥体、模型、光源等）
+2. 进行粗粒度剔除（剔除不可见物体）
+3. 设置每个模型的渲染状态（材质、纹理、使用的Shader等）
+
+这一阶段最重要的就是输出渲染所需要的几何信息，即渲染图元（rendering primitives）。
+
+#### 1.1.2 几何阶段
+
+几何阶段用于处理所有和我们要绘制的几何相关的事情。例如决定要绘制的图元是什么（点、线、三角面等），怎样绘制她们，在哪里绘制她们。这一阶段通常在GPU上执行。
+
+几何阶段负责和每个渲染图元打交道，进行逐顶点、逐多边形的操作。这个阶段的一个重要任务就是把顶点左边转换到屏幕空间中，再交给光栅器处理。
+
+这一阶段的输出是顶点在屏幕空间的二位坐标、每个顶点的深度值、着色等相关信息。
+
+#### 1.1.3 光栅化阶段
+
+通过上一阶段产生的数据来生成屏幕上的像素，渲染出最终的图像。
+
+这一阶段决定每个渲染图元中的哪些像素应该被绘制，她需要对上一阶段产生的逐顶点数据进行插值（纹理坐标、顶点颜色等），然后进行逐像素处理。
+
+### 1.2 GPU流水线
+
+试一下mermaid画流程图：
+
+````mermaid
+graph LR;
+顶点数据-->顶点着色器;
+subgraph 几何阶段;
+顶点着色器-->曲面细分着色器;
+曲面细分着色器-->几何着色器;
+几何着色器-->裁剪;
+裁剪-->屏幕映射;
+end
+````
+
+````mermaid
+graph LR
+屏幕映射-->三角形设置;
+subgraph 光栅化阶段
+三角形设置-->三角形遍历;
+三角形遍历-->片元着色器;
+片元着色器-->逐片元操作;
+end
+逐片元操作-->屏幕图像
+````
+
+书上的截图：
+
+![GPU流水线](images/Unity Shader/GPU流水线.png)
+
+上图中绿色表示完全可编程控制，黄色表示可配置不可编程，蓝色表示由GPU固定实现。实线框表示必须由开发人员编程实现，虚线框表示可选的。
+
+#### 1.2.1 顶点着色器
+
+顶点着色器是流水线的第一个阶段，她的输入来自CPU。顶点着色器的处理单位是顶点，也就是说输入的每个顶点都会调用一次顶点着色器。顶点着色器本身无法创建或销毁任何顶点，也不知道顶点与顶点之间的关系，正因如此GPU可以利用不相关性进行并行处理，这一阶段的处理速度会很快。
+
+顶点着色器需要完成的工作有：
+
+- 顶点坐标变换（代码中表现为`UnityObjectToClipPos(v.vertex)`）
+- 逐顶点光照
+
+#### 1.2.2 裁剪
+
+由于游戏场景非常大，摄像机的事业范围很可能不会覆盖所有物体，所以那些不在摄像机视野范围内的物体不需要被处理，裁剪阶段因此被提出。
+
+一个图元与摄像机视野的关系有三种：
+
+1. 完全在视野内
+2. 部分在视野内
+3. 完全在视野外
+
+部分在视野内的图元将会被裁剪，在视野内外交界处形成新的顶点来代替旧的顶点。
+
+顶点着色器将顶点坐标转换到了裁剪坐标，再由硬件做透视除法后得到归一化的设备坐标（NDC），Unity使用的NDC的z轴范围为[-1, 1]。
+
+由NDC坐标可以确定该顶点是否在一个小立方体内，设备只需要将图元裁剪到立方体内即可。
+
+#### 1.2.3 屏幕映射
+
+NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分量转换到屏幕坐标下。
+
+屏幕映射不会对输入的z分量做任何处理，而是将屏幕空间下的坐标和z分量一起传递到光栅化阶段，屏幕空间坐标和z坐标组成的坐标系叫做窗口坐标系。
+
+#### 1.2.4 三角形设置
+
+从此进入光栅化阶段。该阶段的输入是上阶段输出的窗口坐标信息、法线方向、视角方向等。光栅化有两个最重要的目标：计算每个图元覆盖了哪些像素，以及为这些像素计算她们的颜色。
+
+这一阶段将上一阶段输出的三角顶点转换为三角边的表示方式，为下一阶段做准备。
+
+#### 1.2.5 三角形遍历
+
+这个阶段会检查每个像素是否被一个三角网格覆盖，如果被覆盖则生成一个**片元**。找到哪些像素被三角网格覆盖的过程就叫做三角形遍历，也被称为扫描变换。
+
+该阶段获取上一阶段传递的边界信息，对三角形覆盖区域做插值计算，输出片元序列。
+
+片元并不是真正意义上的像素，而是包含了计算像素颜色的各种信息，如深度信息、法线、纹理坐标等。
+
+#### 1.2.6 片元着色器
+
+片元着色器是另一个非常重要的可编程着色器阶段。
+
+之前的光栅化阶段并不会影响屏幕上每个像素的颜色值，而是会产生一系列数据信息，用来表述一个三角网格是如何覆盖每个像素的。而每个片元就负责存储这一系列的数据。
+
+片元着色器的输入是上一阶段对顶点信息进行插值的结果，她的输出是一个或多个颜色值。
+
+该阶段可以完成很多重要的渲染技术，如纹理采样等，之后再展开。
+
+#### 1.2.7 逐片元操作
+
+这是GPU流水线的最后一个阶段。
+
+该阶段的主要任务：
+
+- 测试片元的可见性（深度测试、模板测试等）
+- 如果一个片元通过了所有测试，则把这个片元的颜色值和已经存储在颜色缓冲区中的颜色进行混合。
+
+### 1.3 坐标空间
 
 - 模型空间
 
@@ -794,22 +928,178 @@ fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_
 
 ### 5.3 Unity的阴影
 
+#### 5.3.1 ShadowMap技术
 
+这种技术理解起来非常的简单，她首先将摄像机的位置放在与光源重合的位置上，那些摄像机看不到的区域就是该光源的阴影区域。
+
+在前向渲染路径中，如果场景中最重要的平行光开启了阴影，Unity就是为该光源计算她的阴影映射纹理（Shadow Map）。阴影映射纹理本质上也是一张深度图，她记录了从该光源的位置出发、能看到的场景中距离她最近的表面信息（深度信息）。
+
+计算阴影映射纹理时，判断距离光源最近的表面位置可以通过Base Pass和Additional Pass来更新深度信息，得到阴影映射纹理，但是这种方法会对性能造成一些浪费，因为我们只要深度信息而已，这两个Pass中往往有一些复杂的光照模型计算。
+
+所以Unity选择使用一个额外的Pass来专门更新光源的阴影映射纹理，这个Pass的标签为`ShadowCaster`。
+
+Unity首先将摄像机放到光源的位置上，然后调用该（渲染物体上的）Pass，通过顶点变换得到光源空间下的位置，并以此来输出深度信息到阴影映射纹理中。
+
+如果找不到该Pass，Unity就会到Fallback指定的Shader中再去寻找。如果仍然没有找到，该物体就无法向其他物体投射阴影。
+
+#### 5.3.2 不透明物体的阴影
+
+投射阴影的Pass其实在Fallback里的Shader（VertexLit.shader），一般我们就不用管了。这里列出具体的代码：
+
+```c
+// Pass to render object as a shadow cas七er
+Pass { 
+    Name "ShadowCaster" 
+	Tags { "LightMode" = "ShadowCaster" ) 
+    CGPROGRAM 
+    #pragma vertex vert 
+    #pragma fragment frag 
+    #pragma multi_compile_shadowcaster
+    #include "UnityCG.cginc" 
+    struct v2f { 
+    	V2F SHADOW CASTER;  
+    ); 
+    v2f vert(appdata_base v) 
+    {
+        v2f o; 
+        TRANSFER SHADOW CASTER NORMALOFFSET(o) 
+        return o;
+    }
+    float4 frag(v2f i) : SV_Target
+    {
+        SHADOW_CASTER_FRAGMENT(i);
+    }
+
+    ENDCG
+}
+```
+
+以下的CG代码基于前向渲染路径Shader修改。为了接受阴影，我们需要在物体的Shader中Base Pass里，包含`AutoLight.cginc`，在顶点着色器输出结构体里添加一个内置宏：
+
+```c
+struct v2f
+{
+    ......
+    SHADOW_COORDS(n)
+}
+```
+
+注意，没有分号。宏里的参数是下一个可用的插值寄存器的索引值，比如：
+
+```c
+struct v2f
+{
+    ...
+    float3 worldNormal : TEXCOORD0;
+    float3 worldPos : TEXCOORD1;
+    // 0和1已经被用了，所以用2
+    SHADOW_COORDS(2)
+}
+```
+
+在顶点着色器返回前添加一个宏：
+
+```c
+v2f vert(a2v v)
+{
+    v2f o;
+    // ......
+    
+    TRANSFER_SHADOW(o);
+    return o;
+}
+```
+
+之后在片元着色器中计算阴影值，与漫反射和高光反射相乘：
+
+```c
+fixed4 frag(v2f i)
+{
+    // ......
+    
+    fixed shadow = SHADOW_ATTENUATION(i);
+    
+    // ......
+    
+    return fixed4(ambient + (diffuse + specular) * atten * shadow, 1.0);
+}
+```
+
+需要注意的是，这些宏使用了上下文变量进行相关计算，也就是说，`a2v`中顶点坐标变量名必须为`vertex`，顶点着色器中的输入结构体必须命名为`v`，`v2f`中的顶点位置必须为`pos`。
+
+（所以其实我觉得限制还是有一点的，但是Unity是为了适应多平台才封装成宏的，也没啥办法，~~除了自己重写（bushi~~）
+
+光照的衰减和阴影其实可以共同计算：
+
+```c
+fixed4 frag(v2f i)
+{
+    // ......
+    
+    UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+    
+    return fixed4(ambient + (diffuse + specular) * atten, 1.0);
+}
+```
+
+`UNITY_LIGHT_ATTENUATION`宏将会帮我们声明第一个参数，也就是上面的`atten`，所以原本的声明就要去掉了。
+
+#### 5.3.3 透明物体的阴影
+
+这里我就要滚回去补上书上的透明效果那一章了。。。
+
+在此之前都没有涉及到渲染顺序。当场景中包含很多模型时，我们并没有考虑先渲染模型A再渲染模型B，最后再渲染模型C，还是按照别的什么顺序进行渲染。
+
+实际上，由于深度缓冲的存在，不需要考虑她们的渲染顺序也能得到正确的渲染效果，深度缓冲的思想是，当渲染一个片元时，与深度缓冲中的值进行对比，如果深度缓冲中的值比片元距离摄像机更近，那么这个片元就不应该被渲染到屏幕上，否则片元的深度值将会写到深度缓冲区中，同时更新颜色缓冲区中的像素。
+
+Unity中通常使用两种方法实现透明效果：透明度测试和透明度混合。
+
+- 透明度测试很暴力，如果一个物体是透明的，那么她就完全不可见，否则完全可见，不需要关闭深度写入。这种方式无法得出半透明效果。
+
+- 透明度混合能得到真正的半透明效果，她会使用当前片元的透明度作为混合因子，与存在颜色缓冲区中的颜色值进行混合从而得到新的颜色，但是需要关闭深度写入。
+
+  需要注意的是，我们只关闭了深度写入，但是深度测试没有被关闭。当使用透明度混合渲染一个片元时，还是会比较她的深度值和深度缓冲区中的深度值，如果她的深度值比缓冲区中的更远，那么就不会进行混合操作。这一点决定了，当一个不透明物体出现在透明物体前，不透明物体仍然可以正常遮挡住透明物体。
+
+  如果不关闭深度写入，那么，如果一个透明物体在不透明物体前面，本来可以透过透明物体看到不透明物体，但由于深度缓冲中的值被透明物体覆盖，导致颜色缓冲也被更新。也就是看不到后面的物体了。
+
+但是，关闭深度写入破坏了深度缓冲的工作机制，这是一个***非常糟糕***的事情，虽然我们不得不这么做。关闭深度写入导致渲染顺序变得非常重要。
+
+我们假设场景中有两个物体，一前一后，前面的是透明物体A，后面的是不透明物体B。考虑一下渲染顺序的不同会发生什么样的结果：
+
+- B先渲染，B写入深度缓冲和颜色缓冲。A后渲染，我们会对A进行深度测试，发现在B的前面，于是我们把A的颜色与B的颜色进行混合，得到正确的透明效果。
+- A先渲染，A只写入颜色缓冲。B后渲染，由于深度缓冲区内没有值，B将会写入深度缓冲区，并覆盖A在颜色缓冲区的写入，于是乎B就愉快地出现在了A的前面。
+
+两个物体都是半透明物体，都没有对深度缓冲进行写入，渲染顺序还重要吗？
+
+我对于书上的描述有点懵，按理来说哈，颜色混合的顺序跟结果没有关系吧，可能是透视的关系？
+
+基于渲染顺序的问题，渲染引擎通常会先对物体进行排序后进行渲染，顺序通常为：
+
+1. 正常渲染所有不透明物体
+2. 把半透明物体按距离摄像机的远近进行排序，按照从后往前的顺序渲染，并开启深度测试，关闭深度写入。
+
+可是这样仍然无法解决所有问题，最大的问题就是如何排序。因为排序无法完全正确，总是有一些奇妙的排列让引擎无法判断排序顺序，像是循环重叠的半透明物体们。
+
+Unity为了解决渲染顺序的问题提供了渲染队列的解决方案，可以使用SubShader的Queue标签来决定模型归于那个渲染队列。Unity使用一系列整数来表示渲染顺序，整数索引越小表示越早被渲染，Unity预定义的渲染队列索引见[附表](#预制渲染队列)。
+
+> 由千透明度混合需要关闭深度写入，由此带来的问题也影响了阴影的生成。总体来说 要想为这些半透明物体产生正确的阴影，需要在每个光源空间下仍然严格按照从后往前的顺序进渲染，这会让阴影处理变得非常复杂，而且也会影响性能。因此，在Unity中，所有内置的半透明Shader是不会产生任何阴影效果的。
+
+so，这里就不继续写了，因为这种阴影的效果和不透明物体的阴影效果是一模一样的，和实际想要的效果不一致。
 
 ### 5.A 附表
 
 <span id="LightMode标签支持的渲染路径设置选项">LightMode标签支持的渲染路径设置选项：</span>
 
-| 标签名                         | 描述                                                         |
-| ------------------------------ | ------------------------------------------------------------ |
-| Always                         | 不管使用哪种渲染路径，该Pass总是会被渲染，但不会计算任何光照 |
-| ForwardBase                    | 用于**前向渲染**。该Pass会计算环境光，最重要的平行光，逐顶点/SH光源和Lightmaps |
-| ForwardAdd                     | 用于**前向渲染**。计算额外的逐像素光源，每个Pass对应一个光源 |
-| Deferred                       | 用于**延迟渲染**。该Pass会渲染G缓冲                          |
-| ShadowCaster                   | 把物体的深度信息渲染到阴影映射纹理（shadowmap）或一张深度纹理中 |
-| PrepassBase                    | 用于**遗留的延迟渲染**。渲染法线和高光反射的指数部分？       |
-| PrepassFinal                   | 用于**遗留的延迟渲染**。该Pass通过合并纹理了、光照和自发光来渲染得到最后的颜色 |
-| Vertex、VertexLMRGBM和VertexLM | 用于**遗留的顶点照明渲染**                                   |
+| 标签名                               | 描述                                                         |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `Always`                             | 不管使用哪种渲染路径，该Pass总是会被渲染，但不会计算任何光照 |
+| `ForwardBase`                        | 用于**前向渲染**。该Pass会计算环境光，最重要的平行光，逐顶点/SH光源和Lightmaps |
+| `ForwardAdd`                         | 用于**前向渲染**。计算额外的逐像素光源，每个Pass对应一个光源 |
+| `Deferred`                           | 用于**延迟渲染**。该Pass会渲染G缓冲                          |
+| `ShadowCaster`                       | 把物体的深度信息渲染到阴影映射纹理（shadowmap）或一张深度纹理中 |
+| `PrepassBase`                        | 用于**遗留的延迟渲染**。渲染法线和高光反射的指数部分？       |
+| `PrepassFinal`                       | 用于**遗留的延迟渲染**。该Pass通过合并纹理了、光照和自发光来渲染得到最后的颜色 |
+| `Vertex`、`VertexLMRGBM`和`VertexLM` | 用于**遗留的顶点照明渲染**                                   |
 
 <span id="前向渲染可以使用的内置光照变量">前向渲染可以使用的内置光照变量：</span>
 
@@ -829,6 +1119,17 @@ fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_
 | `_LightColor`   | float4   | 光源颜色                                                     |
 | `_LightMatrix0` | float4x4 | 从世界空间到光源空间的变换矩阵。可以用于采样cookie和光强衰减纹理 |
 
+<span id="预制渲染队列">预制渲染队列索引号和描述：</span>
+
+| 名称           | 索引 | 描述                                                         |
+| -------------- | ---- | ------------------------------------------------------------ |
+| `Background`   | 1000 | 此渲染队列在任何其他渲染队列之前渲染。                       |
+| `Geometry`     | 2000 | 不透明几何体使用此队列。                                     |
+| `AlphaTest`    | 2450 | 经过 Alpha 测试的几何体将使用此队列。                        |
+| `GeometryLast` |      | 视为“不透明”的最后的渲染队列。（这个是多出来的，书上没有，不知道索引多少） |
+| `Transparent`  | 3000 | 此渲染队列在 Geometry 和 AlphaTest 之后渲染，按照从后到前的顺序。 |
+| `Overlay`      | 4000 | 此渲染队列旨在获得覆盖效果。                                 |
+
 ### 5.B 一些疑问
 
 光源的Cookie，搜了一下，引用官方文档：
@@ -839,3 +1140,231 @@ fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_
 
 还没学到，之后再看
 
+## 6. 高级纹理
+
+这一节主要学习使用立方体纹理、渲染纹理、程序纹理。
+
+### 6.1 立方体纹理
+
+立方体纹理是环境映射的一种实现方法。环境映射可以模拟物体周围的环境，而使用了环境映射的物体可以看起来像镀了一层金属一样反射出周围的环境。
+
+立方体纹理和之前见到的二维纹理不同，立方体纹理一共包含了6张图像，这些图像对应一个立方体的六个面。
+
+立方体纹理的应用有很多，常用于天空盒和环境映射。
+
+#### 6.1.1 天空盒
+
+创建天空盒的方法很简单，在`Project`窗口下新建一个材质，并将材质的Shader设为Unity内置的`Mobile/Skybox`（书上是`Skybox/6 Sided`，两个效果貌似一样，留个问号以后看看？），然后将纹理正确地赋值，如图所示：
+
+![创建天空盒](images/Unity Shader/如何创建天空盒.png)
+
+在Unity中，天空盒是在所有不透明物体之后渲染的，其使用的网格是一个立方体或一个细分后的球体。
+
+#### 6.1.2 环境映射
+
+创建环境映射所需的立方体纹理的方法有三种：
+
+1. 直接由一些特殊布局的纹理创建。
+
+   我们需要提供类似立方体展开图的交叉布局、全景布局等的纹理，然后将该纹理的类型设为`Cubemap`即可，在基于物理的渲染中，我们通常会使用一张HDR图像来生成高质量的Cubemap。
+
+2. 手动创建Cubemap资源，再把6张图赋给她。这是老旧的方法，Unity建议使用第一种方法，因为第一种方法可以对纹理数据进行压缩，且可以支持边缘修正、光滑反射和HDR等功能。
+
+3. 由脚本生成。前两种方法都需要提前准备好立方体纹理的图像，但理想情况下，我们希望根据物体在场景位置的不同，生成不同的立方体纹理。于是我们可以使用Unity的脚本，利用`Camera.RenderToCubemap`方法来实现。书上的脚本实现如下：
+
+   ```c#
+   using UnityEngine;
+   using UnityEditor;
+   using System.Collections;
+   
+   public class RenderCubemapWizard : ScriptableWizard {
+   	
+   	public Transform renderFromPosition;
+   	public Cubemap cubemap;
+   	
+   	void OnWizardUpdate () {
+   		helpString = "Select transform to render from and cubemap to render into";
+   		isValid = (renderFromPosition != null) && (cubemap != null);
+   	}
+   	
+   	void OnWizardCreate () {
+   		// create temporary camera for rendering
+   		GameObject go = new GameObject("CubemapCamera");
+   		go.AddComponent<Camera>();
+   		// place it on the object
+   		go.transform.position = renderFromPosition.position;
+   		// render into cubemap		
+   		go.GetComponent<Camera>().RenderToCubemap(cubemap);
+   		
+   		// destroy temporary camera
+   		DestroyImmediate(go);
+   	}
+   	
+   	[MenuItem("GameObject/Render into Cubemap")]
+   	static void RenderCubemap () {
+   		ScriptableWizard.DisplayWizard<RenderCubemapWizard>("Render cubemap", "Render!");
+   	}
+   }
+   ```
+
+   该脚本需要被放在`Assets/Editor`目录下，成为一个编辑器脚本，然后我们就能在GameObject选项栏里找到Render into Cubemap选项，将物体的位置和导出的纹理设置好，按下Render就可以得到立方体纹理了。如图所示：
+
+   ![编辑器脚本](images/Unity Shader/渲染到立方体纹理脚本.png)
+
+   ![渲染步骤](images/Unity Shader/渲染到立方体纹理步骤.png)
+
+#### 6.1.3 反射和折射
+
+创建完立方体纹理之后，就可以进行环境映射。环境映射最常见的应用就是反射和折射。
+
+我们通过入射光线方向和法线方向计算反射方向，再利用反射方向对立方体纹理进行采样即可。代码如下：
+
+```c
+Shader "Custom/Reflection"
+{
+    Properties
+    {
+        _Color ("颜色", Color) = (1, 1, 1, 1)
+        _ReflectColor ("反射颜色", Color) = (1, 1, 1, 1)
+        _ReflectAmount ("反射程度", Range(0, 1)) = 1
+        _Cubemap ("环境映射纹理", Cube) = "_Skybox" {}
+    }
+
+    SubShader
+    {
+		Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+        Pass
+        {
+            Tags {"LightMode"="ForwardBase"}
+
+            CGPROGRAM
+            
+			#pragma multi_compile_fwdbase
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+			fixed4 _Color;
+			fixed4 _ReflectColor;
+			fixed _ReflectAmount;
+			samplerCUBE _Cubemap;
+
+			struct a2v {
+				float4 vertex : POSITION;
+				float3 normal : NORMAL;
+			};
+			
+			struct v2f {
+				float4 pos : SV_POSITION;
+				float3 worldPos : TEXCOORD0;
+				fixed3 worldNormal : TEXCOORD1;
+				fixed3 worldViewDir : TEXCOORD2;
+				fixed3 worldRefl : TEXCOORD3;
+				SHADOW_COORDS(4)
+			};
+
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+                // pos是裁剪空间的坐标
+                o.pos = UnityObjectToClipPos(v.vertex);
+                // 模型空间法线转换到世界空间法线
+                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                // 模型空间下顶点坐标转换到世界坐标
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                // 获取世界坐标下
+                o.worldViewDir = UnityWorldSpaceViewDir(o.worldPos);
+                // 计算该顶点的反射方向
+                // 通过光路可逆原则反向求得物体反射到摄像机中的光线方向
+                o.worldRefl = reflect(-o.worldViewDir, o.worldNormal);
+
+                TRANSFER_SHADOW(o);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed3 worldNormal = normalize(i.worldNormal);
+                fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+                fixed3 worldViewDir = normalize(i.worldViewDir);
+
+                fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+                fixed3 diffuse = _LightColor0.rgb * _Color.rgb * max(0, dot(worldNormal, worldLightDir));
+
+                // 使用反射方向对立方体纹理进行采样
+                fixed3 reflection = texCUBE(_Cubemap, i.worldRefl).rgb * _ReflectColor.rgb;
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+                // 使用插值函数混合漫反射和反射
+                fixed3 color = ambient + lerp(diffuse, reflection, _ReflectAmount) * atten;
+
+                return fixed4(color, 1.0);
+            }
+            ENDCG
+        }
+    }
+	FallBack "Reflective/VertexLit"
+}
+
+```
+
+折射的原理比反射复杂一些。当光线从一种介质斜射进入另一种介质时，传播方向一般会发生改变，当给定入射角时，可以使用斯涅耳定律来计算反射角（试用一下公式的功能）：
+$$
+\eta_1sin\theta_1=\eta_2sin\theta_2
+$$
+其中$\eta_1$和$\eta_2$分别是两个介质的折射率。真空的折射率是1，玻璃的折射率一般是1.5。
+
+对于实际的物理规律来说，折射一般发生两次，一次是进入时发生的折射，一次是离开时发生的折射。但是想要在实时渲染中模拟出第二次折射方向是比较复杂的，而仅模拟一次得到的效果从视觉上说也还可以，所以通常我们只模拟第一次折射。
+
+![斯涅尔定律](images/Unity Shader/斯涅耳定律.png)
+
+代码改动不大：
+
+```c
+    Properties
+    {
+        _Color ("颜色", Color) = (1, 1, 1, 1)
+        _RefractColor ("折射颜色", Color) = (1, 1, 1, 1)
+        _RefractAmount ("折射程度", Range(0, 1)) = 1
+        _RefractRatio ("折射比率", Range(0.1, 1)) = 0.5
+        _Cubemap ("环境映射纹理", Cube) = "_Skybox" {}
+    }
+```
+
+添加一个新属性存放折射率比率。
+
+```c
+v2f vert(a2v v)
+{
+    // ......
+    // 参数为 入射光线反向 表面法线 光线所在介质与新介质之间的折射率的比值
+    o.worldRefr = refract(-normalize(o.worldViewDir), normalize(o.worldNormal), _RefractRatio);
+    // ......
+    return o;
+}
+fixed4 frag(v2f i) : SV_TARGET
+{
+    // ......
+    // 使用折射方向对立方体纹理进行采样
+    fixed3 refraction = texCUBE(_Cubemap, i.worldRefr).rgb * _RefractColor.rgb;
+    UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+    // 使用插值函数混合漫反射和折射
+    fixed3 color = ambient + lerp(diffuse, refraction, _RefractAmount) * atten;
+
+    return fixed4(color, 1.0);
+}
+```
+
+#### 6.1.4 菲涅尔反射
+
+菲涅尔反射描述了一种光学现象，当光线照到物体表面上时，一部分发生折射，一部分进入物体内部，发生折射或散射。被反射的光和入射光之间存在一定的比率关系，这个比率关系可以通过菲涅尔等式进行计算。
+
+一个常见的例子就是，当你站在湖边，你会发现你看你脚底附近的水体时，你可以看清浅水底下水底，而当你看远处的湖面时，你会发现你只能看到水面反射的环境。
+
+现实生活中的菲涅尔等式是十分复杂的，所以在实时渲染中我们通常使用一些近似等式,比如**Schlick菲涅尔近似等式**：
+$$
+F_{schlick}(\pmb{v},\pmb{n})=F_0+(1-F_0)(1-\pmb{v}\cdot\pmb{n})^5
+$$
