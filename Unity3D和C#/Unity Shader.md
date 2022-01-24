@@ -81,7 +81,7 @@ end
 
 #### 1.2.2 裁剪
 
-由于游戏场景非常大，摄像机的事业范围很可能不会覆盖所有物体，所以那些不在摄像机视野范围内的物体不需要被处理，裁剪阶段因此被提出。
+由于游戏场景非常大，摄像机的视野范围很可能不会覆盖所有物体，所以那些不在摄像机视野范围内的物体不需要被处理，裁剪阶段因此被提出。
 
 一个图元与摄像机视野的关系有三种：
 
@@ -133,6 +133,10 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 
 - 测试片元的可见性（深度测试、模板测试等）
 - 如果一个片元通过了所有测试，则把这个片元的颜色值和已经存储在颜色缓冲区中的颜色进行混合。
+
+#### 1.2.A 其他的参考资料
+
+- [GPU Rendering Pipeline——GPU渲染流水线简介](https://zhuanlan.zhihu.com/p/61949898)
 
 ### 1.3 坐标空间
 
@@ -1334,7 +1338,7 @@ $$
     }
 ```
 
-添加一个新属性存放折射率比率。
+上面添加一个新属性存放折射率比率。
 
 ```c
 v2f vert(a2v v)
@@ -1368,3 +1372,249 @@ fixed4 frag(v2f i) : SV_TARGET
 $$
 F_{schlick}(\pmb{v},\pmb{n})=F_0+(1-F_0)(1-\pmb{v}\cdot\pmb{n})^5
 $$
+另一个使用比较广泛的是**Empricial菲涅尔近似等式**：
+$$
+F_{Empricial}(\pmb{v},\pmb{n})=max(0,min(1, bias+scale\times(1-\pmb{v}\cdot\pmb{n})^{power}))
+$$
+对反射Shader进行修改：
+
+```c
+Properties
+{
+    _Color ("颜色", Color) = (1, 1, 1, 1)
+    _FresnelScale ("菲涅尔", Range(0, 1)) = 0.5
+    _Cubemap ("反射映射立方体纹理", Cube) = "_Skybox" {}
+}
+```
+
+```c
+fixed4 frag(v2f i) : SV_TARGET
+{
+	// ......
+    // Schlick菲涅尔近似等式反射
+    fixed fresnel = _FresnelScale + (1 - _FresnelScale) * pow(1 - dot(worldViewDir, worldNormal), 5);
+
+    // 使用插值函数混合漫反射和反射
+    fixed3 color = ambient + lerp(diffuse, reflection, saturate(fresnel)) * atten;
+
+    return fixed4(color, 1.0);
+}
+```
+
+以上代码可以实现边界照明的效果。
+
+### 6.2 渲染纹理
+
+之前的学习中，一个摄像机的渲染结果会 输出到颜色缓冲中，并显示在屏幕上。现代的GPU允许我们把整个三维场景渲染到一个中间缓冲中，即**渲染目标纹理**，而不是传统的帧缓冲或后背缓冲。与之相关的是**多重渲染目标技术**，这种技术指的是GPU允许把场景同时渲染到多个渲染目标纹理中，而不在需要为每个渲染目标纹理单独渲染完整的场景。
+
+Unity定义了一种专门的纹理类型：渲染纹理。
+
+#### 6.2.1 镜面效果
+
+为了实现镜面效果，我们需要创建一个新摄像头作为镜子的视角，放置在镜子后，镜子使用Unity自带的Quad四边形作为模型。
+
+新建一个渲染纹理，将刚才新建的摄像头的渲染目标设置为新建的渲染纹理，然后将镜子的纹理设置为新建的渲染纹理。
+
+镜子的Shader如下，比较简单：
+
+```c
+Shader "Custom/Mirror"
+{
+	Properties {
+        _MainTex ("Main Tex", 2D) = "white" {}
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+		
+		Pass { 
+			Tags { "LightMode"="ForwardBase" }
+		
+			CGPROGRAM
+			
+			#pragma multi_compile_fwdbase	
+			
+			#pragma vertex vert
+			#pragma fragment frag
+			
+			#include "UnityCG.cginc"
+			
+			sampler2D _MainTex;
+			float4 _MainTex_ST;
+			
+			struct a2v {
+				float4 vertex : POSITION;
+				float4 texcoord : TEXCOORD0;
+			};
+			
+			struct v2f {
+				float4 pos : SV_POSITION;
+				float4 uv : TEXCOORD0;
+			};
+			
+			v2f vert(a2v v) {
+			    v2f o;
+			    o.pos = UnityObjectToClipPos(v.vertex);
+                o.uv = v.texcoord;
+                // y轴翻转
+                o.uv.x = 1 - o.uv.x;
+			    return o;
+			}
+			
+			fixed4 frag(v2f i) : SV_Target {
+                return tex2D(_MainTex, i.uv);
+			}
+			
+			ENDCG
+		}
+
+	} 
+	FallBack "Specular"
+}
+```
+
+实现效果如下图，感觉有点粗糙，这和渲染纹理的分辨率和抗锯齿等属性有关，下图为256x256：
+
+![镜面效果](images/Unity Shader/镜面效果.png)
+
+#### 6.2.2 玻璃效果
+
+在Unity中，我们还可以使用一种特殊标签的Pass来完成获取屏幕图像的目的：GrabPass。
+
+当我们在Shader中定义一个GrabPass后，Unity会把当前屏幕的图像绘制在一张纹理中，以便我们在后续的Pass中访问她。通常会使用GrabPass来实现诸如玻璃等透明材质的模拟。与之前提过的透明度混合不同，使用GrabPass可以让我们对该物体后面的图像进行更复杂的处理，例如使用法线模拟折射效果，而不仅仅是和原屏幕颜色进行混合。
+
+需要注意的是，在使用GrabPass时要小心物体的渲染队列设置。一般使用GrabPass的物体需要将渲染队列设为`"Queue" = "Transparent"`，确保所有不透明物体绘制后才渲染该物体。
+
+代码如下：
+
+```c
+Shader "Custom/GlassRefraction"
+{
+    Properties
+    {
+        _MainTex ("Albedo (RGB)", 2D) = "white" {} // 玻璃的材质纹理
+        _BumpMap ("Normal Map", 2D) = "bump" {} // 玻璃的法线纹理
+        _Cubemap ("环境映射纹理", Cube) = "_Skybox" {} // 
+        _Distortion ("Distortion", Range(0, 100)) = 10 // 折射扭曲程度
+        _RefractionAmount ("折射程度", Range(0, 1)) = 1.0 
+    }
+    SubShader
+    {
+        // 使用Transparent确保该物体在不透明物体渲染之后渲染
+        Tags {"Queue"="Transparent" "RenderType"="Opaque" }
+
+        // 使用GrabPass定义Pass 
+        GrabPass {"_RefractionTex"}
+        Pass
+        {
+            Tags{"LightMode"="Always"}
+
+            CGPROGRAM
+
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST; // 我发现Unity自动生成的Shader没有_ST这个变量
+            sampler2D _BumpMap;
+            float4 _BumpMap_ST;
+            samplerCUBE _Cubemap;
+            float _Distortion;
+            fixed _RefractionAmount;
+            sampler2D _RefractionTex;
+            // 纹素大小 用于采样坐标偏移
+            // 四个分量为 1/width 1/height width height
+            float4 _RefractionTex_TexelSize; // 这个是必须的吗？
+
+                        
+            struct v2f {
+                float4 pos : SV_POSITION;
+                float4 scrPos : TEXCOORD0;
+                float4 uv : TEXCOORD1;
+                float4 TtoW0 : TEXCOORD2;  
+                float4 TtoW1 : TEXCOORD3;  
+                float4 TtoW2 : TEXCOORD4; 
+            };
+
+            v2f vert(appdata_tan v)
+            {
+                v2f o;
+
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.scrPos = ComputeGrabScreenPos(o.pos);
+                o.uv.xy = TRANSFORM_TEX(v.texcoord, _MainTex);
+                o.uv.zw = TRANSFORM_TEX(v.texcoord, _BumpMap);
+
+                float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                fixed3 worldNormal = UnityObjectToWorldNormal(v.normal);
+                fixed3 worldTangent = UnityObjectToWorldDir(v.tangent);
+                // 副法线
+                fixed3 worldBinormal = cross(worldNormal, worldTangent) * v.tangent.w;
+				// 计算从切线空间到世界空间的变换矩阵 w分量被用来存worldPos了
+                o.TtoW0 = float4(worldTangent.x, worldBinormal.x, worldBinormal.x, worldPos.x);
+                o.TtoW1 = float4(worldTangent.y, worldBinormal.y, worldBinormal.y, worldPos.y);
+                o.TtoW2 = float4(worldTangent.z, worldBinormal.z, worldBinormal.z, worldPos.z);
+
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                // 世界坐标
+                float3 worldPos = float3(i.TtoW0.w, i.TtoW1.w, i.TtoW2.w);
+                // 世界视角方向
+                fixed3 worldViewDir = normalize(UnityWorldSpaceViewDir(worldPos));
+				// 法线纹理采样
+                fixed3 bump = UnpackNormal(tex2D(_BumpMap, i.uv.zw));
+				// 计算偏移量 涉及到扭曲程度和纹素大小
+                float2 offset = bump.xy * _Distortion * _RefractionTex_TexelSize.xy;
+                // 偏移
+                i.scrPos.xy = offset + i.scrPos.xy;
+				
+                // 折射纹理采样 xy/w是透视除法 获得真正屏幕空间的坐标
+                fixed3 refrCol = tex2D(_RefractionTex, i.scrPos.xy / i.scrPos.w).rgb;
+				// 将法线从切线空间变换到世界空间下
+                bump = normalize(half3(dot(i.TtoW0.xyz, bump), dot(i.TtoW1, bump), dot(i.TtoW2, bump)));
+				// 获得反射方向
+                fixed3 reflDir = reflect(-worldViewDir, bump);
+                // 主纹理采样
+                fixed4 texColor = tex2D(_MainTex, i.uv.xy);
+                // 使用反射方向对反射立方体纹理进行采样
+                fixed3 reflCol = texCUBE(_Cubemap, reflDir).rgb * texColor.rgb;
+				// 最终混合反射和折射颜色 通过折射程度进行控制
+                fixed3 finalColor = reflCol * (1 - _RefractionAmount) + refrCol * _RefractionAmount;
+
+                return fixed4(finalColor, 1.0);
+
+            }
+
+            ENDCG
+
+        }
+    }
+    FallBack "Specular"
+}
+```
+
+`RenderType`设为`Opaque`看似与`Render Queue`的`Transparent`自相矛盾，但实际上两者服务与不同的需求。
+
+把渲染队列设为Transparent确保该物体在其他不透明物体渲染之后渲染，渲染类型设为Opaque是为了在使用着色器替换？时，该物体可以在需要时被正常渲染。
+
+GrabPass中设置了抓取到的屏幕图像将会被存在哪个纹理中。我们可以省略GrabPass大括号中的字符串（貌似会默认存在_GrabTexture里），但是指定名称的方法可以得到更高的性能。
+
+顶点着色器中进行了必要的顶点变换之后，我们通过调用内置的`ComputeGrabScreenPos`函数来获取对应被抓取的屏幕图像的采样坐标，然后计算主纹理和法线纹理的采样坐标，并将其分别存在float4类型变量的xy和zw分量上。
+
+由于我们需要在片元着色器中把法线方向从切线空间变换到世界空间下，所以要计算并存储切线转世界的变换矩阵，具体看代码。
+
+#### 6.2.3 渲染纹理和GrabPass
+
+上面两种渲染效果分别通过渲染纹理和GrabPass的方式实现，两者之间都可以抓取屏幕图像，也存在一些不同。
+
+GrabPass实现比较简单~~（简单吗=_=）~~，几行代码就可以实现抓取屏幕图像的效果。渲染纹理则需要新建渲染纹理后将摄像机的纹理目标设置为渲染纹理，再将渲染纹理传递给物体的Shader。
+
+从效率上来说，渲染纹理的效率往往好于GrabPass，尤其在移动平台上。使用渲染纹理可以自定义纹理的大小，尽管这种方法需要将部分场景二次渲染，但我们可以通过控制摄像机的渲染层来减少二次渲染的场景物体，或根据某些条件关闭或开启摄像机。而使用GrabPass获取到的纹理分辨率和显示屏幕是一致的，这意味着在一些高分辨率的设备上可能会造成严重的带宽影响。而在移动设备上，GrabPass虽然不会重新渲染场景，但她往往需要CPU直接读取后备缓冲中的数据，破坏了CPU和GPU直接的并行性，这是比较耗时的，甚至在某些移动设备上是不支持的。
+
+## A. 参考资料
+
+[UnityShader魔法书](https://www.zhihu.com/column/c_1213101657103556608)
+
