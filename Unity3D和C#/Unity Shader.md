@@ -1626,6 +1626,187 @@ GrabPass实现比较简单~~（简单吗=_=）~~，几行代码就可以实现�
 
 就是关键帧动画，通过人眼视觉暂留现象实现动画效果。
 
+代码如下：
+
+```c
+Shader "Custom/ImageSequenceAnimation"
+{
+    Properties
+    {
+        _Color ("颜色", Color) = (1, 1, 1, 1)
+        _MainTex ("图像序列", 2D) = "white" {}
+        _HorizontalAmount ("行数", Float) = 4
+        _VerticalAmount ("列数", Float) = 4
+        _Speed ("动画播放速度", Range(1, 100)) = 30
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "Queue"="Transparent"
+            "IgnoreProjector"="True"
+            "RenderType"="Transparent"
+        }
+
+        Pass
+        {
+            Tags
+            {
+                "LightMode"="ForwardBase"
+            }
+
+            ZWrite Off
+			Blend SrcAlpha OneMinusSrcAlpha
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            fixed4 _Color;
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            float _HorizontalAmount;
+            float _VerticalAmount;
+            float _Speed;
+
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float2 texcoord : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+            
+            v2f vert(a2v v)
+            {
+                v2f o;
+                o.pos = UnityWorldToClipPos(v.vertex);
+                o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                float time = floor(_Time.y * _Speed);
+                float row = floor(time / _HorizontalAmount);
+                float column = time - row * _HorizontalAmount;
+
+                half2 uv = i.uv + half2(column, -row);
+                uv.x /= _HorizontalAmount;
+                uv.y /= _VerticalAmount;
+                // uv.x = (uv.x + col) / width
+                // uv.y = (uv.y - row) / height
+
+                fixed4 color = tex2D(_MainTex, uv);
+                color.rgb *= _Color;
+
+                return color;
+            }
+            ENDCG
+        }
+    }
+	FallBack "Transparent/VertexLit"
+}
+```
+
+对uv坐标偏移和缩放有点懵。
+
+果然有问题，这样计算的话，在最开始的时候（0行0列），算出来的uv坐标(0,0)还是(0,0)，而不是预期的(0,3/4)，书上的代码采样到最底行去了。
+
+uv计算的部分换成如下代码就是期待的顺序：
+
+```c
+half2 uv;
+uv.x = (i.uv.x + column) / _HorizontalAmount;
+uv.y = 1 - (i.uv.y + row) / _VerticalAmount;
+```
+
+可能会对一直在增加的`row`变量产生疑惑，只要row等于_VerticalAmount，v轴值就会是负数超过uv坐标的范围。这是因为纹理的拼接模式设置为了重复，所以超出[0, 1]范围的uv坐标将会重复采样，可以理解为自动对溢出的值做取余操作。
+
+#### 7.1.2 uv动画
+
+比较简单，其实就是按照时间变换取改变采样的uv坐标，从而实现移动的效果，看代码：
+
+```c
+Shader "Custom/ScrollingBackground"
+{
+    Properties
+    {
+        _MainTex ("Base Layer", 2D) = "white" {}
+        _DetailTex ("2nd Layer", 2D) = "white" {}
+        _ScrollX ("Base Layer Scroll Speed", Float) = 1.0
+        _Scroll2X ("2nd Layer Scroll Speed", Float) = 1.0
+        _Multiplier ("Layer Multiplier", Float) = 1
+    }
+
+    SubShader
+    {
+        pass
+        {
+            Tags {"LightMode"="ForwardBase"}
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            sampler2D _DetailTex;
+            float4 _DetailTex_ST;
+            float _ScrollX;
+            float _Scroll2X;
+            float _Multiplier;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float4 texcoord : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                fixed4 uv : TEXCOORD0;
+            };
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+                o.pos = UnityWorldToClipPos(v.vertex);
+                o.uv.xy = TRANSFORM_TEX(v.texcoord, _MainTex) + frac(float2(_ScrollX, 0.0) * _Time.y);
+                o.uv.zw = TRANSFORM_TEX(v.texcoord, _DetailTex) + frac(float2(_Scroll2X, 0.0) * _Time.y);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed4 firstLayer = tex2D(_MainTex, i.uv.xy);
+                fixed4 secondLayer = tex2D(_DetailTex, i.uv.zw);
+
+                fixed4 color = lerp(firstLayer, secondLayer, secondLayer.a) * _Multiplier;
+
+                return color;
+
+            }
+            ENDCG
+        }
+    }
+    Fallback "VertexLit"
+}
+```
+
+但是我发现没有办法调整纹理的大小，不管四边形的缩放设置成什么，纹理大小都不变。
+
+### 7.2 顶点动画
+
 
 
 ### 7.A 附表
