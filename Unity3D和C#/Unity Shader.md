@@ -1657,7 +1657,7 @@ Shader "Custom/ImageSequenceAnimation"
             }
 
             ZWrite Off
-			Blend SrcAlpha OneMinusSrcAlpha
+            Blend SrcAlpha OneMinusSrcAlpha
 
             CGPROGRAM
             #pragma vertex vert
@@ -1712,7 +1712,7 @@ Shader "Custom/ImageSequenceAnimation"
             ENDCG
         }
     }
-	FallBack "Transparent/VertexLit"
+    FallBack "Transparent/VertexLit"
 }
 ```
 
@@ -1807,7 +1807,104 @@ Shader "Custom/ScrollingBackground"
 
 ### 7.2 顶点动画
 
+7.1的动画大多涉及的是uv坐标的变化，顶点动画顾名思义就是改变顶点的动画，常用来模拟旗帜的飘动和湍流的小溪等效果。
 
+#### 7.2.1 水面效果
+
+水面的模拟是顶点动画最常见的应用之一，她的原理通常就是使用正弦函数模拟水流的波动效果。
+
+```c
+Shader "Custom/Water"
+{
+    Properties
+    {
+        _MainTex ("Main Tex", 2D) = "white" {}
+        _Color ("Color Tint", Color) = (1, 1, 1, 1)
+        _Magnitude ("扭曲幅度", Float) = 1
+        _Frequency ("Distortion Frequency", Float) = 1
+        _InvWaveLength ("Distortion Inverse Wave Length", Float) = 10
+        _Speed ("Speed", Float) = 5
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "Queue"="Transparent"
+            "IgnoreProjector"="True"
+            "RenderType"="Transparent"
+            "DisableBatching"="True"
+        }
+
+        pass
+        {
+            Tags
+            {
+                "LightMode"="ForwardBase"
+            }
+            ZWrite Off
+            Blend SrcAlpha OneMinusSrcAlpha
+            Cull Off
+
+            CGPROGRAM
+            
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            fixed4 _Color;
+            float _Magnitude;
+            float _Frequency;
+            float _InvWaveLength;
+            float _Speed;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float4 texcoord : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+
+                float4 offset;
+                offset.yzw = float3(0, 0, 0);
+                offset.x = sin(_Frequency * _Time.y + v.vertex.x * _InvWaveLength + v.vertex.y * _InvWaveLength + v.vertex.z * _InvWaveLength) * _Magnitude;
+
+                o.pos = UnityWorldToClipPos(v.vertex + offset);
+                o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+                o.uv += float2(0, _Time.y * _Speed);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed4 color = tex2D(_MainTex, i.uv);
+                color.rgb *= _Color.rgb;
+                return color;
+            }
+            ENDCG
+
+        }
+        
+    }
+
+    Fallback "Transparent/VertexLit"
+}
+
+```
+
+注意到SubShader的Tags中除了透明物体的常规设置，还添加了一个新标签`DisableBatching`。一些SubShader在使用Unity的批处理功能时会出现问题，顶点动画就是其中一种，因为批处理会合并所有相关的模型，而这些模型本身的模型空间将会丢失，在本代码中我们需要在物体的模型空间下对顶点进行偏移，所以在这里需要取消批处理功能。
 
 ### 7.A 附表
 
@@ -1819,6 +1916,243 @@ Shader "Custom/ScrollingBackground"
 | `_SinTime`        | `float4` | t是自场景加载开始所经过的时间的正弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
 | `_CosTime`        | `float4` | t是自场景加载开始所经过的时间的余弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
 | `unity_DeltaTime` | `float4` | dt是时间增量，四个分量的值分别是`(dt, 1/dt. smoothDt, 1/smoothDt)` |
+
+## 8. 屏幕后处理
+
+### 8.1 基本的屏幕后处理脚本系统
+
+屏幕后处理通常是指在渲染完整个场景得到屏幕图像后，再对这个图像进行一系列操作，实现各种屏幕特效。使用这种技术，可以为游戏画面添加更多艺术效果，例如景深、运动模糊等。
+
+因此，想要实现屏幕后处理的基础就是要获取到渲染后的屏幕图像，Unity为我们提供了一个方便的接口：
+
+```
+MonoBehaviour.OnRenderImage(RenderTexture src, RenderTexture dest);
+```
+
+当我们声明这个函数后，Unity会将当前渲染得到的图像存入src中，通过函数中的一系列操作后将目标纹理存在dest中。
+
+再OnRenderImage中我们通常使用Graphics.Blit函数来完成对渲染纹理的处理：
+
+```c#
+public static void Blit(Texture src, RenderTexture dest);
+public static void Blit(Texture src, RenderTexture dest, Materail mat, int pass = -1);
+public static void Blit(Texture src, Material mat, int pass = -1);
+```
+
+其中，参数`src`对应源纹理，`dest`是目标纹理，如果`dest`为`null`，则会把结果直接显示在屏幕上。
+
+`mat`是我们使用的材质，这个材质使用的UnityShader将会进行各种屏幕后处理操作，而`src`将会被传递给Shader中名为`_MainTex`的纹理属性。
+
+`pass`默认值为`-1`，表示将会依次调用Shader中所有的Pass，否则只会调用特定索引的Pass。
+
+默认情况下，`OnRenderImage`函数会在所有不透明和透明的Pass执行完毕之后被调用，以便对场景中所有的游戏对象都产生影响。但有时可能会希望该函数在不透明Pass执行完毕后立即调用该函数，从而不对透明物体产生影响。此时我们可以在OnRenderImage函数前添加`ImageEffectOpaque`属性来实现这样的目的。
+
+要在Unity中实现屏幕后处理，通常过程如下：
+
+1. 在摄像机中添加一个用于屏幕后处理的脚本，该脚本实现`OnRenderImage`方法。
+2. 调用`Graphics.Blit`方法使用特定的Shader对图像进行处理。
+3. 如果要实现一些复杂的屏幕特效，可能需要多次调用`Graphics.Blit`方法。
+
+但是在进行屏幕后处理之前，需要先检查一些条件是否满足，当前平台是否支持渲染纹理和屏幕特效，是否支持使用的Shader等。为此我们需要创建一个基类，可以对条件进行判断，在实现各种屏幕后处理时也只需要继承该基类，再实现派生类中不同的操作即可。
+
+基类的代码如下：
+
+```c#
+using UnityEngine;
+using System.Collections;
+// 屏幕后处理效果需要绑定在某个摄像机且我们希望在编辑模式下也能执行该脚本查看效果
+[ExcuteInEditMode]
+[RequireComponent(typeof(Camera))]
+public class PostEffectsBase : MonoBehaviour
+{
+    // 在Start方法中调用该方法 确保资源和条件都符合要求
+    protected void CheckResources()
+    {
+        bool isSupported = CheckSupport();
+        if (!isSupported)
+        {
+            NotSupported();
+        }
+    }
+    
+    protected bool CheckSupport()
+    {
+        if (SystemInfo.supportsImageEffects == false || SystemInfo.supportsRenderTextures == false)
+        {
+            Debug.LogWaring("该平台不支持屏幕特效或渲染纹理");
+            return false;
+        }
+        return true;
+    }
+    
+    protected void NotSupport()
+    {
+        enabled = false;
+    }
+    
+    // 由于每个屏幕后处理效果通常都需要指定一个Shader来创建一个用于处理渲染纹理的材质，所以基类也提供这样的方法
+    protected Material CheckShaderAndCreateMaterial(Shader shader, Material material)
+    {
+        if (shader == null)
+        {
+            return null;
+        }
+        
+        if (shader.isSupported && material && material.shader == shader)
+        {
+            return material;
+        }
+        
+        if (!shader.isSupported)
+        {
+            return null;
+        }
+        else
+        {
+            material = new Material(shader);
+            material.hideFlags = HideFlags.DontSave;
+            
+            if (material)
+            {
+                return material;
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+    
+    protected void Start()
+    {
+        CheckSupport();
+    }
+}
+```
+
+然后你就会发现有很多方法是淘汰的过时的，so，此篇完结。（笑）
+
+好吧其实就是那两个检查是否支持的方法过时了，永远会返回真（unity 2019）。不管她，继续继续。
+
+接下来我们继承一下这个基类，实现调整屏幕亮度、饱和度和对比度的特效。
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyBrightnessSaturationAndContrast : PostEffectsBase
+{
+    public Shader briSatConShader;
+    private Material briSatConMaterial;
+    public Material material
+    {
+        get
+        {
+            briSatConMaterial = CheckShaderAndCreateMaterial(briSatConShader, briSatConMaterial);
+            return briSatConMaterial;
+        }
+    }
+
+    [Range(0.0f, 3.0f)]
+    public float brightness = 1.0f;
+    
+    [Range(0.0f, 3.0f)]
+    public float saturation = 1.0f;
+
+    [Range(0.0f, 3.0f)]
+    public float contrast = 1.0f;
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest)
+    {
+        if (material != null)
+        {
+            material.SetFloat("_Brightness", brightness);
+            material.SetFloat("_Saturation", saturation);
+            material.SetFloat("_Contrast", contrast);
+
+            Graphics.Blit(src, dest, material);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+Shdaer：
+
+```c
+Shader "Custom/BrightnessSaturationAndContrast"
+{
+    Properties
+    {
+        _MainTex ("Base (RGB)", 2D) = "white" {}
+        _Brightness ("Brightness", Float) = 1
+        _Saturation ("Saturation", Float) = 1
+        _Contrast ("Contrast", Float) = 1
+    }
+    SubShader
+    {
+        pass
+        {
+            ZTest Always
+            Cull Off
+            ZWrite Off
+        }
+
+        CGPROGRAM
+        #pragma vertex vert
+        #pragma fragment frag
+        
+        sampler2D _MainTex;
+        half _Brightness;
+        half _Saturation;
+        half _Contrast;
+        
+        struct a2v
+        {
+            float4 vertex : POSITION;
+            half2 texcoord : TEXCOORD0;
+        };
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv : TEXCOORD0;
+        };
+
+        v2f vert(a2v v)
+        {
+            v2f o;
+            o.pos = UnityWorldToClipPos(v.vertex);
+            o.uv = v.texcoord;
+            return o;
+        }
+
+        fixed4 frag(v2f i) : SV_TARGET
+        {
+            fixed4 renderTex = tex2D(_MainTex, i.uv);
+            // 亮度
+            fixed3 finalColor = renderTex.rgb * _Brightness;
+            // 饱和度
+            fixed luminance = 0.2125 * renderTex.r + 0.7154 * renderTex.g + 0.0721 * renderTex.b;
+            fixed3 luminanceColor = fixed3(luminance, luminance, luminance);
+
+            finalColor = lerp(luminanceColor, finalColor, _Saturation);
+            // 对比度
+            fixed3 avgColor = fixed3(0.5, 0.5, 0.5);
+            finalColor = lerp(avgColor, finalColor, _Contrast);
+
+            return fixed4(finalColor, renderTex.a);
+
+        }
+        ENDCG
+    }
+    Fallback Off
+}
+```
 
 
 
