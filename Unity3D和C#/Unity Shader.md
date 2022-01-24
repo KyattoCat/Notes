@@ -182,10 +182,10 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 ```c
 float4 vert(float4 v : POSITION) : SV_POSITION
 {
-	return mul(UNITY_MATRIX_MVP, v);
-	// 在Unity3D 2019中被替换为
-	// return UnityObjectToClipPos(v);
-	// 函数名很直观 模型到裁剪
+    return mul(UNITY_MATRIX_MVP, v);
+    // 在Unity3D 2019中被替换为
+    // return UnityObjectToClipPos(v);
+    // 函数名很直观 模型到裁剪
 }
 ```
 
@@ -196,7 +196,7 @@ float4 vert(float4 v : POSITION) : SV_POSITION
 ```c
 float4 frag() : SV_TARGET
 {
-	return fixed4(1.0, 1.0, 1.0, 1.0);
+    return fixed4(1.0, 1.0, 1.0, 1.0);
 }
 ```
 
@@ -221,7 +221,7 @@ struct a2v
 
 float4 vert(a2v v) : SV_POSITION
 {
-	return UnityObjectToClipPos(v.vertex);
+    return UnityObjectToClipPos(v.vertex);
 }
 ```
 
@@ -232,9 +232,9 @@ float4 vert(a2v v) : SV_POSITION
 ```c
 struct StructName
 {
-	Type Name : Semantic;
-	Type Name : Semantic;
-	......
+    Type Name : Semantic;
+    Type Name : Semantic;
+    ......
 };
 ```
 
@@ -455,9 +455,9 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 ```c
 Properties
 {
-	......
-	_MainTex ("Main Tex", 2D) = "white" {}
-	......
+    ......
+    _MainTex ("Main Tex", 2D) = "white" {}
+    ......
 }
 ```
 
@@ -564,8 +564,8 @@ float4 _MainTex_ST;
 ```c
 Pass
 {
-	for (each promitive in this model)
-	{
+    for (each promitive in this model)
+    {
         for (each fragment covered by this primitive)
         {
             if (failed in depth test)
@@ -577,11 +577,11 @@ Pass
             {
                 // 若该片元可见 则进行光照计算
                 float4 color = Shading(materialInfo, pos, normal, lightDir, viewDir);
-            	// 并更新帧缓冲
+                // 并更新帧缓冲
                 writeFrameBuffer(fragment, color);
             }
-		}
-	}
+        }
+    }
 }
 ```
 
@@ -643,7 +643,7 @@ G缓冲存储了我们所关心的表面（通常指的是里摄像机最近的�
 ```c
 Pass 1
 {
-	// 第一个Pass不进行真正光照计算 仅仅把可见片元信息存储到G缓冲区中
+    // 第一个Pass不进行真正光照计算 仅仅把可见片元信息存储到G缓冲区中
     for (each primitive in this model)
     {
         for (each fragment covered by this primitive)
@@ -780,7 +780,7 @@ Shader "Custom/ForwardRendering"
             {
                 v2f o;
                 // 坐标空间转换
-				o.pos = UnityObjectToClipPos(v.vertex);
+                o.pos = UnityObjectToClipPos(v.vertex);
 
                 // 将模型法线转换到世界坐标下 法线是33矩阵 所以截取WorldToObject的前三行列
                 o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
@@ -853,7 +853,7 @@ Shader "Custom/ForwardRendering"
             {
                 v2f o;
                 // 坐标空间转换
-				o.pos = UnityObjectToClipPos(v.vertex);
+                o.pos = UnityObjectToClipPos(v.vertex);
 
                 // 将模型法线转换到世界坐标下 法线是33矩阵 所以截取WorldToObject的前三行列
                 o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
@@ -954,14 +954,14 @@ Unity首先将摄像机放到光源的位置上，然后调用该（渲染物体
 // Pass to render object as a shadow cas七er
 Pass { 
     Name "ShadowCaster" 
-	Tags { "LightMode" = "ShadowCaster" ) 
+    Tags { "LightMode" = "ShadowCaster" ) 
     CGPROGRAM 
     #pragma vertex vert 
     #pragma fragment frag 
     #pragma multi_compile_shadowcaster
     #include "UnityCG.cginc" 
     struct v2f { 
-    	V2F SHADOW CASTER;  
+        V2F SHADOW CASTER;  
     ); 
     v2f vert(appdata_base v) 
     {
@@ -1182,32 +1182,32 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
    using System.Collections;
    
    public class RenderCubemapWizard : ScriptableWizard {
-   	
-   	public Transform renderFromPosition;
-   	public Cubemap cubemap;
-   	
-   	void OnWizardUpdate () {
-   		helpString = "Select transform to render from and cubemap to render into";
-   		isValid = (renderFromPosition != null) && (cubemap != null);
-   	}
-   	
-   	void OnWizardCreate () {
-   		// create temporary camera for rendering
-   		GameObject go = new GameObject("CubemapCamera");
-   		go.AddComponent<Camera>();
-   		// place it on the object
-   		go.transform.position = renderFromPosition.position;
-   		// render into cubemap		
-   		go.GetComponent<Camera>().RenderToCubemap(cubemap);
-   		
-   		// destroy temporary camera
-   		DestroyImmediate(go);
-   	}
-   	
-   	[MenuItem("GameObject/Render into Cubemap")]
-   	static void RenderCubemap () {
-   		ScriptableWizard.DisplayWizard<RenderCubemapWizard>("Render cubemap", "Render!");
-   	}
+       
+       public Transform renderFromPosition;
+       public Cubemap cubemap;
+       
+       void OnWizardUpdate () {
+           helpString = "Select transform to render from and cubemap to render into";
+           isValid = (renderFromPosition != null) && (cubemap != null);
+       }
+       
+       void OnWizardCreate () {
+           // create temporary camera for rendering
+           GameObject go = new GameObject("CubemapCamera");
+           go.AddComponent<Camera>();
+           // place it on the object    
+           go.transform.position = renderFromPosition.position;
+           // render into cubemap        
+           go.GetComponent<Camera>().RenderToCubemap(cubemap);
+           
+           // destroy temporary camera
+           DestroyImmediate(go);
+       }
+       
+       [MenuItem("GameObject/Render into Cubemap")]
+       static void RenderCubemap () {
+           ScriptableWizard.DisplayWizard<RenderCubemapWizard>("Render cubemap", "Render!");
+       }
    }
    ```
 
@@ -1236,14 +1236,14 @@ Shader "Custom/Reflection"
 
     SubShader
     {
-		Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+        Tags { "RenderType"="Opaque" "Queue"="Geometry"}
         Pass
         {
             Tags {"LightMode"="ForwardBase"}
 
             CGPROGRAM
             
-			#pragma multi_compile_fwdbase
+            #pragma multi_compile_fwdbase
 
             #pragma vertex vert
             #pragma fragment frag
@@ -1251,24 +1251,24 @@ Shader "Custom/Reflection"
             #include "Lighting.cginc"
             #include "AutoLight.cginc"
 
-			fixed4 _Color;
-			fixed4 _ReflectColor;
-			fixed _ReflectAmount;
-			samplerCUBE _Cubemap;
+            fixed4 _Color;
+            fixed4 _ReflectColor;
+            fixed _ReflectAmount;
+            samplerCUBE _Cubemap;
 
-			struct a2v {
-				float4 vertex : POSITION;
-				float3 normal : NORMAL;
-			};
-			
-			struct v2f {
-				float4 pos : SV_POSITION;
-				float3 worldPos : TEXCOORD0;
-				fixed3 worldNormal : TEXCOORD1;
-				fixed3 worldViewDir : TEXCOORD2;
-				fixed3 worldRefl : TEXCOORD3;
-				SHADOW_COORDS(4)
-			};
+            struct a2v {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+            
+            struct v2f {
+                float4 pos : SV_POSITION;
+                float3 worldPos : TEXCOORD0;
+                fixed3 worldNormal : TEXCOORD1;
+                fixed3 worldViewDir : TEXCOORD2;
+                fixed3 worldRefl : TEXCOORD3;
+                SHADOW_COORDS(4)
+            };
 
 
             v2f vert(a2v v)
@@ -1310,7 +1310,7 @@ Shader "Custom/Reflection"
             ENDCG
         }
     }
-	FallBack "Reflective/VertexLit"
+    FallBack "Reflective/VertexLit"
 }
 
 ```
@@ -1390,7 +1390,7 @@ Properties
 ```c
 fixed4 frag(v2f i) : SV_TARGET
 {
-	// ......
+    // ......
     // Schlick菲涅尔近似等式反射
     fixed fresnel = _FresnelScale + (1 - _FresnelScale) * pow(1 - dot(worldViewDir, worldNormal), 5);
 
@@ -1420,55 +1420,55 @@ Unity定义了一种专门的纹理类型：渲染纹理。
 ```c
 Shader "Custom/Mirror"
 {
-	Properties {
+    Properties {
         _MainTex ("Main Tex", 2D) = "white" {}
-	}
-	SubShader {
-		Tags { "RenderType"="Opaque" "Queue"="Geometry"}
-		
-		Pass { 
-			Tags { "LightMode"="ForwardBase" }
-		
-			CGPROGRAM
-			
-			#pragma multi_compile_fwdbase	
-			
-			#pragma vertex vert
-			#pragma fragment frag
-			
-			#include "UnityCG.cginc"
-			
-			sampler2D _MainTex;
-			float4 _MainTex_ST;
-			
-			struct a2v {
-				float4 vertex : POSITION;
-				float4 texcoord : TEXCOORD0;
-			};
-			
-			struct v2f {
-				float4 pos : SV_POSITION;
-				float4 uv : TEXCOORD0;
-			};
-			
-			v2f vert(a2v v) {
-			    v2f o;
-			    o.pos = UnityObjectToClipPos(v.vertex);
+    }
+    SubShader {
+        Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+        
+        Pass { 
+            Tags { "LightMode"="ForwardBase" }
+        
+            CGPROGRAM
+            
+            #pragma multi_compile_fwdbase    
+            
+            #pragma vertex vert
+            #pragma fragment frag
+            
+            #include "UnityCG.cginc"
+            
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            
+            struct a2v {
+                float4 vertex : POSITION;
+                float4 texcoord : TEXCOORD0;
+            };
+            
+            struct v2f {
+                float4 pos : SV_POSITION;
+                float4 uv : TEXCOORD0;
+            };
+            
+            v2f vert(a2v v) {
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.texcoord;
                 // y轴翻转
                 o.uv.x = 1 - o.uv.x;
-			    return o;
-			}
-			
-			fixed4 frag(v2f i) : SV_Target {
+                return o;
+            }
+            
+            fixed4 frag(v2f i) : SV_Target {
                 return tex2D(_MainTex, i.uv);
-			}
-			
-			ENDCG
-		}
+            }
+            
+            ENDCG
+        }
 
-	} 
-	FallBack "Specular"
+    } 
+    FallBack "Specular"
 }
 ```
 
@@ -1550,7 +1550,7 @@ Shader "Custom/GlassRefraction"
                 fixed3 worldTangent = UnityObjectToWorldDir(v.tangent);
                 // 副法线
                 fixed3 worldBinormal = cross(worldNormal, worldTangent) * v.tangent.w;
-				// 计算从切线空间到世界空间的变换矩阵 w分量被用来存worldPos了
+                // 计算从切线空间到世界空间的变换矩阵 w分量被用来存worldPos了
                 o.TtoW0 = float4(worldTangent.x, worldBinormal.x, worldBinormal.x, worldPos.x);
                 o.TtoW1 = float4(worldTangent.y, worldBinormal.y, worldBinormal.y, worldPos.y);
                 o.TtoW2 = float4(worldTangent.z, worldBinormal.z, worldBinormal.z, worldPos.z);
@@ -1564,24 +1564,24 @@ Shader "Custom/GlassRefraction"
                 float3 worldPos = float3(i.TtoW0.w, i.TtoW1.w, i.TtoW2.w);
                 // 世界视角方向
                 fixed3 worldViewDir = normalize(UnityWorldSpaceViewDir(worldPos));
-				// 法线纹理采样
+                // 法线纹理采样
                 fixed3 bump = UnpackNormal(tex2D(_BumpMap, i.uv.zw));
-				// 计算偏移量 涉及到扭曲程度和纹素大小
+                // 计算偏移量 涉及到扭曲程度和纹素大小
                 float2 offset = bump.xy * _Distortion * _RefractionTex_TexelSize.xy;
                 // 偏移
                 i.scrPos.xy = offset + i.scrPos.xy;
-				
+                
                 // 折射纹理采样 xy/w是透视除法 获得真正屏幕空间的坐标
                 fixed3 refrCol = tex2D(_RefractionTex, i.scrPos.xy / i.scrPos.w).rgb;
-				// 将法线从切线空间变换到世界空间下
+                // 将法线从切线空间变换到世界空间下
                 bump = normalize(half3(dot(i.TtoW0.xyz, bump), dot(i.TtoW1, bump), dot(i.TtoW2, bump)));
-				// 获得反射方向
+                // 获得反射方向
                 fixed3 reflDir = reflect(-worldViewDir, bump);
                 // 主纹理采样
                 fixed4 texColor = tex2D(_MainTex, i.uv.xy);
                 // 使用反射方向对反射立方体纹理进行采样
                 fixed3 reflCol = texCUBE(_Cubemap, reflDir).rgb * texColor.rgb;
-				// 最终混合反射和折射颜色 通过折射程度进行控制
+                // 最终混合反射和折射颜色 通过折射程度进行控制
                 fixed3 finalColor = reflCol * (1 - _RefractionAmount) + refrCol * _RefractionAmount;
 
                 return fixed4(finalColor, 1.0);
@@ -1613,6 +1613,33 @@ GrabPass中设置了抓取到的屏幕图像将会被存在哪个纹理中。我
 GrabPass实现比较简单~~（简单吗=_=）~~，几行代码就可以实现抓取屏幕图像的效果。渲染纹理则需要新建渲染纹理后将摄像机的纹理目标设置为渲染纹理，再将渲染纹理传递给物体的Shader。
 
 从效率上来说，渲染纹理的效率往往好于GrabPass，尤其在移动平台上。使用渲染纹理可以自定义纹理的大小，尽管这种方法需要将部分场景二次渲染，但我们可以通过控制摄像机的渲染层来减少二次渲染的场景物体，或根据某些条件关闭或开启摄像机。而使用GrabPass获取到的纹理分辨率和显示屏幕是一致的，这意味着在一些高分辨率的设备上可能会造成严重的带宽影响。而在移动设备上，GrabPass虽然不会重新渲染场景，但她往往需要CPU直接读取后备缓冲中的数据，破坏了CPU和GPU直接的并行性，这是比较耗时的，甚至在某些移动设备上是不支持的。
+
+## 7. 动画
+
+学习如何使用时间变量控制动画，介绍两种常见的纹理动画，然后学习使用顶点动画实现流动的河流。
+
+### 7.1 纹理动画
+
+时间内置变量见[附表](#时间变量)
+
+#### 7.1.1 序列帧动画
+
+就是关键帧动画，通过人眼视觉暂留现象实现动画效果。
+
+
+
+### 7.A 附表
+
+<span id="时间变量">UnityShader时间内置变量：</span>
+
+| 名称              | 类型     | 描述                                                         |
+| ----------------- | -------- | ------------------------------------------------------------ |
+| `_Time`           | `float4` | t是自场景加载开始所经过的时间，四个分量的值分别是`(t/20, t, 2t, 3t)` |
+| `_SinTime`        | `float4` | t是自场景加载开始所经过的时间的正弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
+| `_CosTime`        | `float4` | t是自场景加载开始所经过的时间的余弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
+| `unity_DeltaTime` | `float4` | dt是时间增量，四个分量的值分别是`(dt, 1/dt. smoothDt, 1/smoothDt)` |
+
+
 
 ## A. 参考资料
 
