@@ -1906,6 +1906,10 @@ Shader "Custom/Water"
 
 注意到SubShader的Tags中除了透明物体的常规设置，还添加了一个新标签`DisableBatching`。一些SubShader在使用Unity的批处理功能时会出现问题，顶点动画就是其中一种，因为批处理会合并所有相关的模型，而这些模型本身的模型空间将会丢失，在本代码中我们需要在物体的模型空间下对顶点进行偏移，所以在这里需要取消批处理功能。
 
+#### 7.2.2 广告牌效果
+
+待补充
+
 ### 7.A 附表
 
 <span id="时间变量">UnityShader时间内置变量：</span>
@@ -2034,6 +2038,8 @@ public class PostEffectsBase : MonoBehaviour
 
 好吧其实就是那两个检查是否支持的方法过时了，永远会返回真（unity 2019）。不管她，继续继续。
 
+### 8.2 亮度、饱和度、对比度
+
 接下来我们继承一下这个基类，实现调整屏幕亮度、饱和度和对比度的特效。
 
 ```c#
@@ -2154,6 +2160,515 @@ Shader "Custom/BrightnessSaturationAndContrast"
     Fallback Off
 }
 ```
+
+### 8.3 边缘检测
+
+卷积操作指的是使用一个卷积核对一张图像中的每个像素进行一系列操作。卷积核通常是一个四方形网格结构（2x2、3x3等），该区域的每个方格都有一个权重值，当对图像中的某个像素进行卷积时，我们通常会把卷积核的中心放置在该像素上，翻转核？之后再依次计算核中每个像素和覆盖的图像像素值的乘积并求和，得到一个新的像素值。（那2x2的卷积核怎么放？）
+
+首先先确定一下边的定义，如果相邻的像素之间存在明显的颜色、亮度、纹理的差异，我们就认为她们之间存在一条边界。这些相邻像素之间的差值可以用梯度来表示，所以边界的梯度绝对值一般会比较大。
+
+用于边缘检测的卷积核常见的有以下几种（书上的图）：
+
+![边缘检测算子](images/Unity Shader/常见边缘检测算子.png)
+
+可以看到每种算子都包含两个方向的卷积核，分别用于计算水平和垂直方向上的梯度信息。整体的梯度信息一般使用分量的平方和的平方根：
+$$
+G=\sqrt{G_x^2+G_y^2}
+$$
+出于性能考虑，一般舍弃平方和开方操作，使用绝对值代替：
+$$
+G=\abs{G_x}+\abs{G_y}
+$$
+梯度值越大，该像素越有可能是边界。
+
+以下利用Sobel算子和像素亮度进行边缘检测，代码如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyEdgeDetection : PostEffectsBase
+{
+    public Shader edgeDetectShader;
+    private Material edgeDetectMaterial = null;
+
+    public Material material
+    {
+        get
+        {
+            edgeDetectMaterial = CheckShaderAndCreateMaterial(edgeDetectShader, edgeDetectMaterial);
+            return edgeDetectMaterial;
+        }
+    }
+
+    [Range(0.0f, 1.0f)]
+    public float edgesOnly = 0.0f;
+
+    public Color edgeColor = Color.black;
+
+    public Color backgroundColor = Color.white;
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            material.SetFloat("_EdgeOnly", edgesOnly);
+            material.SetColor("_EdgeColor", edgeColor);
+            material.SetColor("_BackgroundColor", backgroundColor);
+            Graphics.Blit(src, dest, material);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyEdgeDetection"
+{
+    Properties
+    {
+        _MainTex ("Base", 2D) = "white" {}
+        _EdgeOnly ("Edge Only", Float) = 1.0
+        _EdgeColor ("Edge Color", Color) = (0, 0, 0, 1)
+        _BackgroundColor ("Background Color", Color) = (1, 1, 1, 1)
+    }
+    SubShader
+    {
+        Pass
+        {
+            ZTest Always
+            Cull Off
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            half4 _MainTex_TexelSize;
+            fixed _EdgeOnly;
+            fixed4 _EdgeColor;
+            fixed4 _BackgroundColor;
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                half2 uv[9] : TEXCOORD0;
+            };
+
+            v2f vert(appdata_img v)
+            {
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                half2 uv = v.texcoord;
+                // 计算九个坐标
+                o.uv[0] = uv + _MainTex_TexelSize.xy * half2(-1, -1);
+                o.uv[1] = uv + _MainTex_TexelSize.xy * half2(0, -1);
+                o.uv[2] = uv + _MainTex_TexelSize.xy * half2(1, -1);
+                o.uv[3] = uv + _MainTex_TexelSize.xy * half2(-1, 0);
+                o.uv[4] = uv + _MainTex_TexelSize.xy * half2(0, 0);
+                o.uv[5] = uv + _MainTex_TexelSize.xy * half2(1, 0);
+                o.uv[6] = uv + _MainTex_TexelSize.xy * half2(-1, 1);
+                o.uv[7] = uv + _MainTex_TexelSize.xy * half2(0, 1);
+                o.uv[8] = uv + _MainTex_TexelSize.xy * half2(1, 1);
+                return o;
+            }
+            // 计算亮度
+            fixed luminance(fixed4 color)
+            {
+                return 0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b;
+            }
+
+            half Sobel(v2f i)
+            {
+                const half Gx[9] = {-1, -2, -1, 0, 0, 0, 1, 2, 1};
+                const half Gy[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
+                half texColor;
+                half edgeX = 0;
+                half edgeY = 0;
+                for (int it = 0; it < 9; it++)
+                {
+                    texColor = luminance(tex2D(_MainTex, i.uv[it]));
+                    edgeX += texColor * Gx[it];
+                    edgeY += texColor * Gy[it];
+                }
+                half edge = 1 - abs(edgeX) - abs(edgeY);
+                return edge;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                half edge = Sobel(i);
+                fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[4]), edge);
+                fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge);
+                return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly);
+            }
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
+### 8.4 高斯模糊
+
+高斯模糊同样利用的卷积操作，卷积核名为高斯核。高斯核是一个正方形大小的滤波核，其中每个元素的计算都基于下面的高斯方程：
+$$
+G(x,y)=\frac{1}{2\pi\sigma^2}e^{-{\frac{x^2+y^2}{2\sigma^2}}}
+$$
+其中$\sigma$是标准方差（一般取值为1），x和y分别对应了当前位置到卷积核中心的整数距离。要构建高斯核，只需要对高斯核内每个位置进行计算，得出对应的高斯值。为了保证滤波后的图像不会变暗，我们需要对高斯核中的权重进行归一化，保证所有权重的和为1。
+
+高斯方程很好地模拟了邻域每个像素对当前处理像素的影响程度，即距离越近影响越大。高斯核的维数越高，模糊程度越大，使用一个NxN大小的高斯核进行卷积操作，就需要进行NxNxWxH次纹理采样，采样次数非常巨大。不过我们可以把一个二维高斯函数拆分成两个一维函数，使得采样次数降为2xNxWxH（W和H是图像的宽和高）。对于一个5x5的高斯核来说，由于其高斯值存在明显的重复，我们甚至可以只存三个权重值就可以表示一个高斯核：
+
+![高斯核](images/Unity Shader/高斯核.png)
+
+代码实现如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyGaussianBlur : PostEffectsBase
+{
+    public Shader gaussianBlurShader;
+    private Material gaussianBlurMaterial = null;
+
+    public Material material
+    {
+        get 
+        {
+            gaussianBlurMaterial = CheckShaderAndCreateMaterial(gaussianBlurShader, gaussianBlurMaterial);
+            return gaussianBlurMaterial;
+        }
+    }
+
+    [Range(0, 4)]
+    public int iterations = 3;
+    [Range(0.2f, 3.0f)]
+    public float blurSpeed = 0.6f;
+    [Range(1, 8)]
+    public int downSample = 2;
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            // 降采样提高效率
+            int rtW = src.width / downSample;
+            int rtH = src.height / downSample;
+            // 高斯模糊需要调用两个Pass 所以需要一块中间缓冲来存储第一个Pass执行后的结果
+            RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
+            // 双线性过滤
+            buffer.filterMode = FilterMode.Bilinear;
+            Graphics.Blit(src, buffer);
+
+            // 迭代
+            for (int i = 0; i < iterations; i++)
+            {
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
+
+                RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+                
+                Graphics.Blit(buffer, bufferTemp, material, 0);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+                bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+                Graphics.Blit(buffer, bufferTemp, material, 1);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+            }
+
+            Graphics.Blit(buffer, dest);
+            RenderTexture.ReleaseTemporary(buffer);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyGaussianBlur"
+{
+    Properties
+    {
+        _MainTex ("Base", 2D) = "white" {}
+        _BlurSize ("Blur Size", Float) = 1.0
+    }
+
+    SubShader
+    {
+        // 第一次使用CGINCLUDE组织代码 类似与头文件一样的东西 里面的可以这个Shader中使用
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        float _BlurSize;
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv[5] : TEXCOORD0;
+        };
+
+        v2f vert(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            half2 uv = v.texcoord;
+
+            o.uv[0] = uv;
+            o.uv[1] = uv + float2(0.0, _MainTex_TexelSize.y * 1.0) * _BlurSize;
+            o.uv[2] = uv - float2(0.0, _MainTex_TexelSize.y * 1.0) * _BlurSize;
+            o.uv[3] = uv + float2(0.0, _MainTex_TexelSize.y * 2.0) * _BlurSize;
+            o.uv[4] = uv - float2(0.0, _MainTex_TexelSize.y * 2.0) * _BlurSize;
+
+            return o;
+        }
+
+        fixed4 frag(v2f i) : SV_TARGET
+        {
+            // 权重
+            float weight[3] = {0.4026, 0.2442, 0.0545};
+            fixed3 sum = tex2D(_MainTex, i.uv[0]).rgb * weight[0];
+
+            for (int it = 1; it < 3; it++)
+            {
+                // 这里还挺有意思的
+                sum += tex2D(_MainTex, i.uv[it * 2 - 1]).rgb * weight[it];
+                sum += tex2D(_MainTex, i.uv[2 * it]).rgb * weight[it];
+            }
+            return fixed4(sum, 1.0);
+        }
+        ENDCG
+
+        pass
+        {
+            // 定义Pass名称可以再其他Shader中直接使用名称来调用该Pass
+            NAME "GAUSSIAN_BLUR_VERTICAL"
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            ENDCG
+        }
+        pass
+        {
+            NAME "GAUSSIAN_BLUE_HORIZONTAL"
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
+### 8.5 Bloom效果
+
+效果就是把亮的地方模糊化，模拟真实摄像机的效果。
+
+为了实现Bloom效果，我们需要先提取出屏幕中的较亮区域，然后使用高斯模糊对提取出来高亮区域进行模糊处理，再与原图像进行混合。
+
+代码如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyBloom : PostEffectsBase
+{
+    public Shader bloomShader;
+    private Material bloomMaterial = null;
+    public Material material
+    {
+        get
+        {
+            bloomMaterial = CheckShaderAndCreateMaterial(bloomShader, bloomMaterial);
+            return bloomMaterial;
+        }
+    }
+
+    
+    [Range(0, 4)]
+    public int iterations = 3;
+
+    [Range(0.2f, 3.0f)]
+    public float blurSpeed = 0.6f;
+
+    [Range(1, 8)]
+    public int downSample = 2;
+
+    [Range(0, 4.0f)]
+    public float luminanceThreshold = 0.6f;
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            material.SetFloat("_LuminanceThreshold", luminanceThreshold);
+            // 降采样提高效率
+            int rtW = src.width / downSample;
+            int rtH = src.height / downSample;
+
+            RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
+            // 双线性过滤
+            buffer.filterMode = FilterMode.Bilinear;
+            // 提取较亮区域
+            Graphics.Blit(src, buffer, material, 0);
+
+            // 迭代
+            for (int i = 0; i < iterations; i++)
+            {
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
+
+                RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+                
+                Graphics.Blit(buffer, bufferTemp, material, 1);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+                bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+                Graphics.Blit(buffer, bufferTemp, material, 2);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+            }
+            // 将处理后的较量区域与源图像混合
+            material.SetTexture("_Bloom", buffer);
+            Graphics.Blit(src, dest, material, 3);
+
+            RenderTexture.ReleaseTemporary(buffer);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyBloom"
+{
+    Properties
+    {
+        _MainTex ("Base", 2D) = "white" {}
+        _Bloom ("Bloom", 2D) = "black" {}
+        _LuminanceThreshold ("LuminanceThreshold", Float) = 0.5
+        _BlurSize ("Blur Size", Float) = 1.0
+    }
+
+    SubShader
+    {
+        // 使用CGINCLUDE组织代码 类似与头文件一样的东西 里面的可以这个Shader中使用
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        sampler2D _Bloom;
+        float _LuminanceThreshold;
+        float _BlurSize;
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv : TEXCOORD0;
+        };
+
+
+        fixed luminance(fixed4 color)
+        {
+            return 0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b;
+        }
+
+        v2f vertExractBright(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+            o.uv = v.texcoord;
+
+            return o;
+        }
+
+        fixed4 fragExractBright(v2f i) : SV_TARGET
+        {
+            fixed4 color = tex2D(_MainTex, i.uv);
+            fixed val = clamp(luminance(color) - _LuminanceThreshold, 0.0, 1.0);
+
+            return color * val;
+        }
+        
+        struct v2fBloom
+        {
+            float4 pos : SV_POSITION;
+            half4 uv : TEXCOORD0;
+        };
+
+        v2fBloom vertBloom(appdata_img v)
+        {
+            v2fBloom o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            o.uv.xy = v.texcoord;
+            o.uv.zw = v.texcoord;
+
+#if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0.0)
+            {
+                o.uv.w = 1.0 - o.uv.w;
+            }
+#endif
+
+            return o;
+        }
+
+        fixed4 fragBloom(v2fBloom i) : SV_TARGET
+        {
+            return tex2D(_MainTex, i.uv.xy) + tex2D(_Bloom, i.uv.zw);
+        }
+
+
+        ENDCG
+        ZTest Always
+        Cull Off
+        ZWrite Off
+        pass
+        {
+            CGPROGRAM
+            #pragma vertex vertExractBright
+            #pragma fragment fragExractBright
+            ENDCG
+        }
+
+        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_VERTICAL"
+        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_HORIZONTAL"
+
+        pass
+        {
+            CGPROGRAM
+            #pragma vertex vertBloom
+            #pragma fragment fragBloom
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
+
 
 
 
