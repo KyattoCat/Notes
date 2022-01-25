@@ -2668,7 +2668,186 @@ Shader "Custom/MyBloom"
 }
 ```
 
+### 8.6 深度和法线纹理
 
+在书上这是一个独立的章节，不过我觉得都属于屏幕后处理，就合并在这里了。
+
+在Unity中获取深度纹理很简单，只需要在脚本中设置摄像机的`depthTextureMode = DepthTextureMode.Depth`
+
+一旦设置了上面的模式，我们就可以在Shader中通过声明`_CameraDepthTexture`变量来访问她。
+
+如果设置为`DepthTextureMode.DepthNormal`，我们就可以获得深度+法线纹理，甚至可以使用或运算将两种模式组合来得到深度和深度+法线纹理。
+
+获取到的深度纹理在多数情况下使用tex2D进行采样即可，但在某些老平台上，我们需要一些特殊处理，不过Unity帮我们写好了一个统一的宏`SAMPLE_DEPTH_TEXTURE`来处理平台的差异问题，所以我们一般使用这个宏来对深度纹理进行采样。还有其他类似的宏`SAMPLE_DEPTH_TEXTURE_PROJ`和`SAMPLE_DEPTH_TEXTURE_LOD`，她们的后缀也说明了采样的方式。这里不做更详细的解释，有需要我回来再补。
+
+#### 8.6.1 动态模糊
+
+实现动态模糊的技术常用的是使用速度映射图。利用深度纹理在片元着色器中通过视角-投影矩阵的逆矩阵为每个像素计算其在世界空间坐标下的位置。当得到世界空间的坐标后，我们使用前一帧的视角-投影矩阵对其变换，得到该位置在前一帧中的NDC坐标。然后使用像素在前后帧的位置差，得到速度，并使用平均模糊实现动态模糊效果。
+
+代码如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyMotionBlur : PostEffectsBase
+{
+    public Shader motionBlurShader;
+    private Material motionBlurMaterial;
+    public Material material
+    {
+        get
+        {
+            motionBlurMaterial = CheckShaderAndCreateMaterial(motionBlurShader, motionBlurMaterial);
+            return motionBlurMaterial;
+        }
+    }
+
+    [Range(0, 1)]
+    public float blurSize = 0.5f;
+
+    private Camera myCamera;
+    public Camera MyCamera
+    {
+        get => GetComponent<Camera>();
+    }
+
+    // 存放上一帧摄像机的视角*投影矩阵
+    private Matrix4x4 previousViewProjectionMatrix;
+
+    void OnEnable()
+    {
+        MyCamera.depthTextureMode |= DepthTextureMode.Depth;
+    }
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            material.SetFloat("_BlurSize", blurSize);
+
+            material.SetMatrix("_PreviousViewProjectionMatrix", previousViewProjectionMatrix);
+            Matrix4x4 currentViewProjectionMatrix = MyCamera.projectionMatrix * MyCamera.worldToCameraMatrix;
+            Matrix4x4 currentViewProjectionInverseMatrix = currentViewProjectionMatrix.inverse;
+
+            material.SetMatrix("_CurrentViewProjectionMatrix", currentViewProjectionMatrix);
+            previousViewProjectionMatrix = currentViewProjectionMatrix;
+
+            Graphics.Blit(src, dest, material);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyMotionBlur"
+{
+    Properties
+    {
+        _MainTex ("Main", 2D) = "white" {}
+        _BlurSize ("blur size", Float) = 0.5
+    }
+
+    SubShader
+    {
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        sampler2D _CameraDepthTexture;
+        float4x4 _CurrentViewProjectionInverseMatrix;
+        float4x4 _PreviousViewProjectionMatrix;
+        half _BlurSize;
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv : TEXCOORD0;
+            half2 uv_depth : TEXCOORD1;
+        };
+
+        v2f vert(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            o.uv = v.texcoord;
+            o.uv_depth = v.texcoord;
+
+            #if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0)
+            {
+                o.uv_depth.y = 1 - o.uv_depth.y;
+            }
+            #endif
+            return o;
+        }
+
+        fixed4 frag(v2f i) : SV_TARGET
+        {
+            // 获取深度缓冲采样
+            float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv_depth);
+            // 把深度值通过反映射 回到NDC坐标
+            float4 H = float4(i.uv.x * 2 - 1, i.uv.y * 2 - 1, d * 2 - 1, 1);
+            // 
+            float4 D = mul(_CurrentViewProjectionInverseMatrix, H);
+            // 获取该像素在世界坐标下的位置
+            float4 worldPos = D / D.w;
+
+            // 当前视角坐标 NDC
+            float4 currentPos = H;
+            // 使用前一帧的视角投影矩阵变换得到前一帧在NDC下的坐标
+            float4 previousPos = mul(_PreviousViewProjectionMatrix, worldPos);
+            // 
+            previousPos /= previousPos.w;
+
+            // 使用当前NDC坐标和前一帧NDC坐标做差得到像素速度
+            float2 velocity = (currentPos.xy - previousPos.xy) / 2.0f;
+
+            // 
+            float2 uv = i.uv;
+            float4 c = tex2D(_MainTex, uv);
+
+            uv += velocity * _BlurSize;
+            // 用速度对该像素的邻域像素进行采样 
+            for (int it = 1; it < 3; it++, uv += velocity * _BlurSize)
+            {
+                float4 currentColor = tex2D(_MainTex, uv);
+                c += currentColor;
+            }
+            // 平均模糊
+            c /= 3;
+            return fixed4(c.rgb, 1.0);
+        }
+        ENDCG
+
+        pass
+        {
+            ZTest Always
+            Cull Off
+            ZWrite Off
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            ENDCG
+        }
+    }
+
+    Fallback Off
+}
+```
+
+（这里实现的效果不太对劲，明天再看看）
+
+#### 8.6.2 全局雾效
+
+雾效是游戏中经常使用的一种效果，Unity内置的雾效可以产生基于距离的线性或指数雾效。为了在自己的Shader中实现这些雾效，需要添加`#pragma multi_compile_fog`指令，然后使用相关的内置宏`UNITY_FOG_COORDS`、`UNITY_TRANSFER_FOG`和`UNITY_APPLY_FOG`等。这种方法的缺点在于，我们不仅要为场景中所有物体添加相关渲染的代码，而且实现的效果十分有限，且无法进行个性化的操作。
+
+所以本节使用屏幕后处理技术来实现雾效。其关键在于，根据深度纹理来重建每个像素在世界空间下的位置，在本节中学习快速从深度纹理重建世界坐标的方法（前面的动态模糊需要进行两次矩阵操作，对性能有一定影响）。这种方法首先对图像空间？下的视锥体射线进行插值，这条射线存储了该像素在世界空间下到摄像机的方向信息。然后我们把该射线和线性化之后的视角空间下的深度值相乘，再加上摄像机的世界位置，就可以得到该像素再世界空间下的坐标。
 
 
 
