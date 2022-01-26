@@ -608,6 +608,10 @@ public class TimerSystem : MonoBehaviour
 
 我把这个项目放在Samples文件夹下的Unity定时回调系统项目，以便以后参考。
 
+## 3. 服务器环境下的定时器
+
+由于我做前端，所以这一部分就暂时略过，以后有需要再补充。
+
 ## A. 参考资料
 
 [siki学院定时回调系统技术专题](http://www.sikiedu.com/my/course/370)
