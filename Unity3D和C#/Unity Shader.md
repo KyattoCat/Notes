@@ -2847,7 +2847,568 @@ Shader "Custom/MyMotionBlur"
 
 雾效是游戏中经常使用的一种效果，Unity内置的雾效可以产生基于距离的线性或指数雾效。为了在自己的Shader中实现这些雾效，需要添加`#pragma multi_compile_fog`指令，然后使用相关的内置宏`UNITY_FOG_COORDS`、`UNITY_TRANSFER_FOG`和`UNITY_APPLY_FOG`等。这种方法的缺点在于，我们不仅要为场景中所有物体添加相关渲染的代码，而且实现的效果十分有限，且无法进行个性化的操作。
 
-所以本节使用屏幕后处理技术来实现雾效。其关键在于，根据深度纹理来重建每个像素在世界空间下的位置，在本节中学习快速从深度纹理重建世界坐标的方法（前面的动态模糊需要进行两次矩阵操作，对性能有一定影响）。这种方法首先对图像空间？下的视锥体射线进行插值，这条射线存储了该像素在世界空间下到摄像机的方向信息。然后我们把该射线和线性化之后的视角空间下的深度值相乘，再加上摄像机的世界位置，就可以得到该像素再世界空间下的坐标。
+所以本节使用屏幕后处理技术来实现雾效。其关键在于，根据深度纹理来重建每个像素在世界空间下的位置，在本节中学习快速从深度纹理重建世界坐标的方法（前面的动态模糊需要在片元着色器中进行两次矩阵操作，对性能有一定影响）。这种方法首先对图像空间？下的视锥体射线进行插值，这条射线存储了该像素在世界空间下到摄像机的方向信息。然后我们把该射线和线性化之后的视角空间下的深度值相乘，再加上摄像机的世界位置，就可以得到该像素再世界空间下的坐标。
+
+我们知道，坐标系的一个顶点坐标可以通过她相对与另一个顶点坐标的偏移量来求得，重建像素的世界坐标也是基于这样的思想。我们只需要知道摄像机在世界空间下的位置，以及世界空间下该像素相对于摄像机的偏移量，把她们相加就可以得到该像素的世界坐标。代码表示如下：
+
+```c
+float4 worldPos = _WorldSpaceCameraPos + linearDepth * interpolatedRay;
+```
+
+其中`_WorldSpaceCameraPos`表示摄像机在世界空间下的坐标，`linearDepth * interpolatedRay`表示该像素相对于摄像机的偏移量，`linearDepth`是由从深度纹理获得的线性深度值，`interpolatedRay`是由顶点着色器输出并插值后得到的射线，其中包含了该像素到摄像机的方向，也包含了距离信息。
+
+代码如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Fog : PostEffectsBase
+{
+    public Shader shader;
+    private Material _material;
+    public Material material
+    {
+        get
+        {
+            _material = CheckShaderAndCreateMaterial(shader, _material);
+            return _material;
+        }
+    }
+
+    private Camera myCamera;
+    public Camera MyCamera
+    {
+        get
+        {
+            if (myCamera == null)
+            {
+                myCamera = GetComponent<Camera>();
+            }
+            return myCamera;
+        }
+    }
+    private Transform _cameraTransform;
+    public Transform cameraTransform
+    {
+        get
+        {
+            if (_cameraTransform == null)
+            {
+                _cameraTransform = MyCamera.transform;
+            }
+            return _cameraTransform;
+        }
+    }
+
+    [Range(0, 3)]
+    public float fogDensity = 1.0f;
+
+    public Color fogColor = Color.white;
+
+    public float fogStart = 0.0f;
+    public float fogEnd = 2.0f;
+
+    private void OnEnable() {
+        MyCamera.depthTextureMode |= DepthTextureMode.Depth;
+    }
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            Matrix4x4 frustumCorners = Matrix4x4.identity;
+
+            float fov = MyCamera.fieldOfView;
+            float near = MyCamera.nearClipPlane;
+            float far = MyCamera.farClipPlane;
+            float aspect = MyCamera.aspect;
+            // 这里一串都是在算从摄像机到近裁剪平面四个角的向量
+            float halfHeight = near * Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+            Vector3 toRight = cameraTransform.right * halfHeight * aspect;
+            Vector3 toTop = cameraTransform.up * halfHeight;
+
+            Vector3 topLeft = cameraTransform.forward * near - toRight + toTop;
+            float scale = topLeft.magnitude / near;
+
+            topLeft.Normalize();
+            topLeft *= scale;
+
+            Vector3 topRight = cameraTransform.forward * near + toRight + toTop;
+            topRight.Normalize();
+            topRight *= scale;
+
+            Vector3 bottomLeft = cameraTransform.forward * near - toRight - toTop;
+            bottomLeft.Normalize();
+            bottomLeft *= scale;
+
+            Vector3 bottomRight = cameraTransform.forward * near + toRight - toTop;
+            bottomRight.Normalize();
+            bottomRight *= scale;
+            // 这里和Shader对应
+            frustumCorners.SetRow(0, bottomLeft);
+            frustumCorners.SetRow(1, bottomRight);
+            frustumCorners.SetRow(2, topRight);
+            frustumCorners.SetRow(3, topLeft);
+
+            material.SetMatrix("_FrustumCornersRay", frustumCorners);
+            material.SetMatrix("_ViewProjectionInverseMatrix", (MyCamera.projectionMatrix * MyCamera.worldToCameraMatrix).inverse);
+            
+            material.SetFloat("_FogDensity", fogDensity);
+            material.SetColor("_FogColor", fogColor);
+            material.SetFloat("_FogStart", fogStart);
+            material.SetFloat("_FogEnd", fogEnd);
+
+            Graphics.Blit(src, dest, material);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/Fog"
+{
+    Properties
+    {
+        _MainTex ("Main", 2D) = "white" {}
+        _FogDensity ("Fog Density", Float) = 1.0
+        _FogColor ("Fog Color", Color) = (1, 1, 1, 1)
+        _FogStart ("Fog Start", Float) = 0.0
+        _FogEnd ("Fog End", Float) = 1.0
+    }
+
+    SubShader
+    {
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        float4x4 _FrustumCornersRay;
+
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        sampler2D _CameraDepthTexture;
+        half _FogDensity;
+        fixed4 _FogColor;
+        float _FogStart;
+        float _FogEnd;
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv : TEXCOORD0;
+            half2 uv_depth : TEXCOORD1;
+            float4 interpolatedRay : TEXCOORD2;
+        };
+
+        v2f vert(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            o.uv = v.texcoord;
+            o.uv_depth = v.texcoord;
+            #if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0)
+            {
+                o.uv_depth.y = 1 - o.uv_depth.y;
+            }
+            #endif
+            // 这里确定靠近哪个象限 然后确定趋向哪个向量
+            int index = 0;
+            if (v.texcoord.x < 0.5 && v.texcoord.y < 0.5)
+            {
+                index = 0;
+            }
+            else if (v.texcoord.x > 0.5 && v.texcoord.y < 0.5)
+            {
+                index = 1;
+            }
+            else if (v.texcoord.x > 0.5 && v.texcoord.y > 0.5)
+            {
+                index = 2;
+            }
+            else
+            {
+                index = 3;
+            }
+
+            #if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0)
+            {
+                index = 3 - index;
+            }
+            #endif
+
+            o.interpolatedRay = _FrustumCornersRay[index];
+            return o;
+        }
+
+        fixed4 frag(v2f i) : SV_TARGET
+        {
+            // 获取深度信息
+            float linearDepth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv_depth));
+            // 不理解
+            float3 worldPos = _WorldSpaceCameraPos + linearDepth * i.interpolatedRay.xyz;
+            // 线性雾效
+            float fogDensity = (_FogEnd - worldPos.y) / (_FogEnd - _FogStart);
+            fogDensity = saturate(fogDensity * _FogDensity);
+
+            fixed4 color = tex2D(_MainTex, i.uv);
+            color.rgb = lerp(color.rgb, _FogColor.rgb, fogDensity);
+            return color;
+        }
+        ENDCG
+
+        pass
+        {
+            ZTest Always
+            Cull Off
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
+实话实说，我对与Shader里的坐标转换并不是很理解，得到的深度值和四个角的向量中的一个相乘，那不就沿着某个角延申出去了吗？怎么确定位置呢？
+
+#### 8.6.3 更好的边缘检测
+
+前面实现的边缘检测实际上效果不是很好，因为她直接利用颜色信息进行检测，会产生很多我们不希望得到的边缘线，比如阴影部分、纹理中颜色变化大的部分等。
+
+使用深度和法线纹理来进行边缘检测不会受纹理和光照的影响，这种方法检测的边界更可靠。
+
+这一节书上使用的是Roberts算子，可以回去8.3看一下那个图片。Roberts算子本质上就是计算左上角和右下角的差值作为边界检测的依据，如果差值大于一个可控的阈值，就认为存在边界。
+
+```c#
+using UnityEngine;
+
+public class MyEdgeDetectV2 : PostEffectsBase
+{
+    public Shader edgeDetectShader;
+    private Material edgeDetectMaterial = null;
+
+    public Material material
+    {
+        get
+        {
+            edgeDetectMaterial = CheckShaderAndCreateMaterial(edgeDetectShader, edgeDetectMaterial);
+            return edgeDetectMaterial;
+        }
+    }
+
+    [Range(0.0f, 1.0f)]
+    public float edgesOnly = 0.0f;
+
+    public Color edgeColor = Color.black;
+
+    public Color backgroundColor = Color.white;
+
+    public float sampleDistance = 1.0f;
+    public float sensitivityDepth = 1.0f;
+    public float sensitivityNormals = 1.0f;
+
+    private void OnEnable() {
+        GetComponent<Camera>().depthTextureMode |= DepthTextureMode.DepthNormals;
+    }
+    // 只对不透明物体产生影响
+    [ImageEffectOpaque]
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            material.SetFloat("_EdgeOnly", edgesOnly);
+            material.SetColor("_EdgeColor", edgeColor);
+            material.SetColor("_BackgroundColor", backgroundColor);
+            material.SetFloat("_SampleDistance", sampleDistance);
+            material.SetVector("_Sensitivity", new Vector4(sensitivityNormals, sensitivityDepth, 0f, 0f));
+            Graphics.Blit(src, dest, material);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyEdgeDetectV2"
+{
+    Properties
+    {
+        _MainTex ("Base", 2D) = "white" {}
+        _EdgeOnly ("Edge Only", Float) = 1.0
+        _EdgeColor ("Edge Color", Color) = (0, 0, 0, 1)
+        _BackgroundColor ("Background Color", Color) = (1, 1, 1, 1)
+        _SampleDistance ("采样距离", Float) = 1.0
+        _Sensitivity ("Sensitivity", Vector) = (1, 1, 1, 1)
+    }
+
+    SubShader
+    {
+        CGINCLUDE
+        #include "UnityCG.cginc"
+
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        fixed _EdgeOnly;
+        fixed4 _EdgeColor;
+        fixed4 _BackgroundColor;
+        float _SampleDistance;
+        half4 _Sensitivity;
+        sampler2D _CameraDepthNormalsTexture;
+        
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv[5] : TEXCOORD0;
+        };
+
+        v2f vert(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            half2 uv = v.texcoord;
+
+            o.uv[0] = uv;
+            #if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0)
+                uv.y = 1 - uv.y;
+            #endif
+
+            o.uv[1] = uv + _MainTex_TexelSize.xy * half2(1, 1) * _SampleDistance;
+            o.uv[2] = uv + _MainTex_TexelSize.xy * half2(-1, -1) * _SampleDistance;
+            o.uv[3] = uv + _MainTex_TexelSize.xy * half2(-1, 1) * _SampleDistance;
+            o.uv[4] = uv + _MainTex_TexelSize.xy * half2(1, -1) * _SampleDistance;
+
+            return o;
+        }
+
+        half CheckSame(half4 center, half4 sample)
+        {
+            half2 centerNormal = center.xy;
+            float centerDepth = DecodeFloatRG(center.zw);
+            half2 sampleNormal = sample.xy;
+            float sampleDepth = DecodeFloatRG(sample.zw);
+
+            half2 diffNormal = abs(centerNormal - sampleNormal) * _Sensitivity.x;
+            int isSameNormal = (diffNormal.x + diffNormal.y) < 0.1;
+
+            float diffDepth = abs(centerDepth - sampleDepth) * _Sensitivity;
+            int isSameDepth = diffDepth < 0.1 * centerDepth;
+
+            return isSameNormal * isSameDepth ? 1.0 : 0.0;
+        }
+
+        fixed4 frag(v2f i) : SV_TARGET
+        {
+            half4 sample1 = tex2D(_CameraDepthNormalsTexture, i.uv[1]);
+            half4 sample2 = tex2D(_CameraDepthNormalsTexture, i.uv[2]);
+            half4 sample3 = tex2D(_CameraDepthNormalsTexture, i.uv[3]);
+            half4 sample4 = tex2D(_CameraDepthNormalsTexture, i.uv[4]);
+
+            half edge = 1.0f;
+
+            edge *= CheckSame(sample1, sample2);
+            edge *= CheckSame(sample3, sample4);
+
+            fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[0]), edge);
+            fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge);
+
+            return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly);
+        }
+        ENDCG
+        pass
+        {
+            ZTest Always
+            Cull Off
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
+![效果真不错](images/Unity Shader/基于深度和法线纹理的边界检测.png)
+
+
+
+## 9.卡通风格渲染
+
+卡通风格渲染被很多游戏所应用，例如无主之地的美漫风格，卡普空的Okami的水墨风格等。
+
+卡通风格的高光一般是一块块分界明显的纯色区域，物体的边缘通常要绘制轮廓。
+
+![](images/Unity Shader/卡通风格渲染.png)
+
+```c
+Shader "Custom/ToonShading"
+{
+    Properties
+    {
+        _Color ("颜色", Color) = (1, 1, 1, 1)
+        _MainTex ("主纹理", 2D) = "white" {}
+        _Ramp ("漫反射渐变纹理", 2D) = "white" {}
+        _Outline ("轮廓", Range(0, 1)) = 0.1
+        _OutlineColor ("轮廓颜色", Color) = (0, 0, 0, 1)
+        _Specular ("高光反射", Color) = (1, 1, 1, 1)
+        _SpecularScale ("高光反射阈值", Range(0, 0.1)) = 0.01
+    }
+    SubShader
+    {
+        Tags {"RenderType"="Opaque" "Queue"="Geometry"}
+        Pass
+        {
+            NAME "OUTLINE"
+            Cull Front
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            fixed _Outline;
+            fixed4 _OutlineColor;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+            };
+
+            v2f vert(a2v v)
+            {
+                v2f o;
+                float4 pos = mul(UNITY_MATRIX_MV, v.vertex);
+                float3 normal = mul((float3x3)UNITY_MATRIX_IT_MV, v.normal);
+                normal.z = -0.5;
+
+                pos = pos + float4(normalize(normal), 0) * _Outline;
+                o.pos = mul(UNITY_MATRIX_P, pos);
+
+                return o;
+            }
+
+            float4 frag(v2f i) : SV_TARGET
+            {
+                return float4(_OutlineColor.rgb, 1.0);
+            }
+
+            ENDCG
+        }
+
+        Pass
+        {
+            Tags
+            {
+                "LightMode"="ForwardBase"
+            }
+
+            Cull Back
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #pragma multi_compile_fwdbase
+
+            #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+            #include "UnityShaderVariables.cginc"
+
+            fixed4 _Color;
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            sampler2D _Ramp;
+            fixed4 _Specular;
+            fixed _SpecularScale;
+
+            struct a2v
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                float4 texcoord : TEXCOORD0;
+                float4 tangent : TANGENT;
+            }; 
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 worldNormal : TEXCOORD1;
+                float3 worldPos : TEXCOORD2;
+                SHADOW_COORDS(3)
+            };
+
+            v2f vert(appdata_tan v)
+            {
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+
+                o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+
+                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                
+                TRANSFER_SHADOW(o);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed3 worldNormal = normalize(i.worldNormal);
+                fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+                fixed3 worldViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+                fixed3 worldHalfDir = normalize(worldLightDir + worldViewDir);
+
+                fixed4 color = tex2D(_MainTex, i.uv);
+                fixed3 albedo = color.rgb * _Color.rgb;
+
+                fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+                fixed diff = dot(worldNormal, worldLightDir);
+                diff = (diff * 0.5 + 0.5) * atten;
+
+                fixed3 diffuse = _LightColor0.rgb * albedo * tex2D(_Ramp, float2(diff, diff)).rgb;
+
+                fixed spec = dot(worldNormal, worldHalfDir);
+                fixed w = fwidth(spec) * 2.0;
+                fixed3 specular = _Specular.rgb * lerp(0, 1, smoothstep(-w, w, spec + _SpecularScale - 1)) * step(0.0001, _SpecularScale);
+
+                return fixed4(ambient + diffuse + specular, 1.0);
+            }
+            ENDCG
+        }
+    }
+    Fallback "Diffuse"
+}
+```
+
+书上描边的方法有点奇妙，通过一个Pass对背面的片元进行膨胀的操作，然后把背面的像素全部涂成设定的颜色，以此来实现描边的效果，然后再用一个Pass把正面的光照什么的计算好正常上色，然后就是对高光反射进行一些限制，让高光反射实现再某个阈值附件突变的效果，以此模拟卡通的高光效果（但是我看不出来有哪里像卡通了），然后魔法书里使用的貌似是一张高光的纹理，不记得具体怎么操作的了，不过我猜是通过计算完的高光值（应该是上面代码的spec）对高光纹理进行采样，然后采样，高光纹理是由几个色块组成的，魔法书上画了三个色块，实现出来的效果比书上的好得多。
+
+我想明天尝试一下魔法书的方法。
 
 ## A. 参考资料
 
