@@ -3416,7 +3416,172 @@ Shader "Custom/ToonShading"
 
 书上描边的方法有点奇妙，通过一个Pass对背面的片元进行膨胀的操作，然后把背面的像素全部涂成设定的颜色，以此来实现描边的效果，然后再用一个Pass把正面的光照什么的计算好正常上色。
 
+## 10. 噪声纹理
+
+噪声纹理其实就是由[0, 1]内的随机数构成的纹理，只不过像素与像素之间的差值是平滑的，如果把噪声值当作高度图，就有点像一块延绵起伏的小地区。
+
+### 10.1 消融效果
+
+消融效果常见于角色死亡，无主之地正是如此。1
+
+消融效果的基础实现原理十分的简单，使用噪声纹理+透明度测试即可，低于阈值的区域剔除，然后把在剔除区域边缘的像素混合上颜色，最后手动或程序自动调整阈值来显示消融的效果。
+
+```c
+Shader "Custom/Dissolve"
+{
+    Properties
+    {
+        _BurnAmount ("BurnAmount", Range(0, 1)) = 0
+        _LineWidth ("BurnLineWIdth", Range(0, 0.2)) = 0.1
+        _MainTex ("Main Tex", 2D) = "white" {}
+        _BumpMap ("Normal Map", 2D) = "bump" {}
+        _BurnFirstColor ("BFC", Color) = (1, 0, 0, 1)
+        _BurnSecondColor ("BSC", Color) = (1, 0, 0, 1)
+        _BurnMap ("BurnMap", 2D) = "white" {}
+    }
+
+    SubShader
+    {
+        Pass
+        {
+            Tags
+            {
+                "LightMode" = "ForwardBase"
+            }
+            // 关闭面片剔除 否则消融后暴露内部构造会出现错误的结果
+            Cull Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fwdbase
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            sampler2D _BumpMap;
+            float4 _BumpMap_ST;
+            sampler2D _BurnMap;
+            float4 _BurnMap_ST;
+            
+            fixed _BurnAmount;
+            fixed _LineWidth;
+            fixed4 _BurnFirstColor;
+            fixed4 _BurnSecondColor;
+
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float2 uvMainTex : TEXCOORD0;
+                float2 uvBumpMap : TEXCOORD1;
+                float2 uvBurnMap : TEXCOORD2;
+                float3 lightDir : TEXCOORD3;
+                float3 worldPos : TEXCOORD4;
+                SHADOW_COORDS(5)
+            };
+
+            v2f vert(appdata_tan v)
+            {
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+
+                o.uvMainTex = TRANSFORM_TEX(v.texcoord, _MainTex);
+                o.uvBumpMap = TRANSFORM_TEX(v.texcoord, _BumpMap);
+                o.uvBurnMap = TRANSFORM_TEX(v.texcoord, _BurnMap);
+
+                TANGENT_SPACE_ROTATION;
+                o.lightDir = mul(rotation, ObjSpaceLightDir(v.vertex)).xyz;
+
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+
+                TRANSFER_SHADOW(o);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed3 burn = tex2D(_BurnMap, i.uvBurnMap).rgb;
+
+                clip(burn.r - _BurnAmount);
+
+                float3 tangentLightDir = normalize(i.lightDir);
+                fixed3 tangentNormal = UnpackNormal(tex2D(_BumpMap, i.uvBumpMap));
+
+                fixed3 albedo = tex2D(_MainTex, i.uvMainTex).rgb;
+
+                fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.rgb * albedo;
+
+                fixed3 diffuse = _LightColor0.rgb * albedo * max(0, dot(tangentNormal, tangentLightDir));
+
+                fixed t = 1 - smoothstep(0, _LineWidth, burn.r - _BurnAmount);
+                fixed3 burnColor = lerp(_BurnFirstColor, _BurnSecondColor, t);
+                burnColor = pow(burnColor, 5);
+
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+                fixed3 finalColor = lerp(ambient + diffuse * atten, burnColor, t * step(0.0001, _BurnAmount));
+
+                return fixed4(finalColor, 1);
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            Tags
+            {
+                "LightMode" = "ShadowCaster"
+            }
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_shadowcaster
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+            sampler2D _BurnMap;
+            float4 _BurnMap_ST;
+
+            fixed _BurnAmount;
+
+
+            struct v2f
+            {
+                V2F_SHADOW_CASTER;
+                float2 uvBurnMap : TEXCOORD1;
+            };
+
+            v2f vert(appdata_base v)
+            {
+                v2f o;
+                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o);
+                o.uvBurnMap = TRANSFORM_TEX(v.texcoord, _BurnMap);
+
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_TARGET
+            {
+                fixed3 burn = tex2D(_BurnMap, i.uvBurnMap).rgb;
+                clip(burn.r - _BurnAmount);
+
+                SHADOW_CASTER_FRAGMENT(i)
+            }
+            ENDCG
+        }
+    }
+}
+```
+
+![](images/Unity Shader/燃烧效果.png)
+
+效果还是可以的。
+
 ## A. 参考资料
 
 [UnityShader魔法书](https://www.zhihu.com/column/c_1213101657103556608)
 
+[常用Shader内置函数](https://zhuanlan.zhihu.com/p/353434000)
