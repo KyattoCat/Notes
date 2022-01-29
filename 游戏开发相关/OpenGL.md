@@ -407,6 +407,8 @@ void drawTriangle()
 
 总算完成了，还真有点小多，逻辑要清晰才能顺下来。
 
+我把VAO理解成一个存放配置OpenGL顶点数据输入信息的地方，VBO是顶点数据存放的地方。当我绑定VAO之后，配置顶点输入的函数就会把这些顶点配置信息写到VAO里，当我需要绘制图形时，通过绑定存有配置信息的VAO来获取顶点输入时的解析方式，OpenGL再从VBO中获取真实顶点数据并按照解析方式输入进着色器，完成绘制。
+
 真正能运行的完整代码如下，省略了基础的注释。还是放上LOGL上的[源码](https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/2.1.hello_triangle/hello_triangle.cpp)以供以后参考：
 
 ```cpp
@@ -470,8 +472,6 @@ int main()
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
 	glCompileShader(fragmentShader);
-	int success;
-	char infoLog[512];
 
 	GLuint shaderProgram = glCreateProgram();
 	glAttachShader(shaderProgram, vertexShader);
@@ -548,3 +548,191 @@ void processInput(GLFWwindow* window)
 
 #### 1.3.7 索引缓冲对象
 
+假如现在我们要通过画两个三角形来绘制一个矩形，那么顶点数据可能是这样的：
+
+```cpp
+float vertices[] = {
+    // 第一个三角形
+    0.5f, 0.5f, 0.0f,   // 右上角
+    0.5f, -0.5f, 0.0f,  // 右下角
+    -0.5f, 0.5f, 0.0f,  // 左上角
+    // 第二个三角形
+    0.5f, -0.5f, 0.0f,  // 右下角
+    -0.5f, -0.5f, 0.0f, // 左下角
+    -0.5f, 0.5f, 0.0f   // 左上角
+};
+```
+
+可以看出来，存在两个重复的顶点。如果我们有成千上万个三角形，那么这种绘制三角形的方式就会带来极大的浪费。
+
+索引缓冲对象的作用就是能够让OpenGL通过索引获取顶点，这样每个点只需要存一个，后面需要使用时通过一个索引值来获取即可。
+
+```cpp
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
+#include <iostream>
+
+void framebufferSizeCallback(GLFWwindow* window, GLint width, GLint height);
+void processInput(GLFWwindow* window);
+
+const GLuint SCREEN_WIDTH = 800;
+const GLuint SCREEN_HEIGHT = 600;
+
+
+const char* vertexShaderSource = "#version 330 core\n"
+"layout(location = 0) in vec3 aPos;\n"
+"void main()\n"
+"{\n"
+"	gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+"}\0";
+
+const char* fragmentShaderSource = "#version 330 core\n"
+"out vec4 FragColor;\n"
+"void main()\n"
+"{\n"
+"	FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+"}\0";
+
+int main()
+{
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "LearnOpenGL", NULL, NULL);
+	if (window == NULL)
+	{
+		std::cout << "创建窗口失败" << std::endl;
+		glfwTerminate();
+		return -1;
+	}
+
+	glfwMakeContextCurrent(window);
+	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		std::cout << "初始化GLAD失败" << std::endl;
+		glfwTerminate();
+		return -1;
+	}
+
+
+	// 开始
+	// 先把Shader编译好
+	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(vertexShader);
+
+	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(fragmentShader);
+
+	GLuint shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+
+	// 顶点数据
+	GLfloat vertices[] = {
+		 0.5f,  0.5f, 0.0f,
+		 0.5f, -0.5f, 0.0f,
+		-0.5f, -0.5f, 0.0f,
+		-0.5f,  0.5f, 0.0f
+	};
+	// 索引
+	GLuint indices[] = {
+		0, 1, 3,
+		1, 2, 3
+	};
+	// 创建顶点缓冲对象和顶点数组对象
+	GLuint VBO, VAO, EBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+	// 绑定顶点数组对象
+	glBindVertexArray(VAO);
+	// 绑定顶点缓冲对象
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	// 复制数据
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	// 绑定索引缓冲对象
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	// 复制数据
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+	// 配置顶点数据
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	// 解绑
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+
+	while (!glfwWindowShouldClose(window))
+	{
+		processInput(window);
+
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		// 总算开始画画了
+		glUseProgram(shaderProgram);
+		glBindVertexArray(VAO);
+		// OpenGL会从当前绑定到索引缓冲中的对象中获取顶点数据
+        // 第二个参数表示有几个索引 然后按照三角形的方式绘制
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+	}
+
+	// 可选的
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &VBO);
+	glDeleteBuffers(1, &EBO);
+	glDeleteProgram(shaderProgram);
+
+	glfwDestroyWindow(window);
+	glfwTerminate();
+	return 0;
+}
+
+void framebufferSizeCallback(GLFWwindow* window, GLint width, GLint height)
+{
+	glViewport(0, 0, width, height);
+}
+
+void processInput(GLFWwindow* window)
+{
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+	{
+		glfwSetWindowShouldClose(window, true);
+	}
+}
+```
+
+#### 1.3.8 总结
+
+回顾一下画一个三角形需要什么吧，多回头看一下加深记忆。
+
+1. 一个窗口，这是当然的了。
+2. 着色器程序编译链接，现在我们使用的是硬编码方式，我想以后会有更好的方式。
+3. 准备顶点数据和索引数据
+4. 创建并绑定顶点数组对象
+5. 创建并绑定顶点缓冲区存放顶点数据
+6. 创建并绑定索引缓冲区存放索引数据
+7. 配置顶点输入数据
+8. 进入渲染主循环，绑定顶点数组对象
+9. 使用glDrawElements函数进行绘制
+10. 后续释放资源等操作
+
+这张图片我觉得很好解释了VAO、VBO和EBO之间的关系：
+
+![](images/OpenGL/vertex_array_objects_ebo.png)
+
+LOGL上这一节有一些练习，我会自己做一遍然后放在同目录下Samples/OpenGLExercises中，命名方式会根据这一节的编号进行命名，比如1_3_1表示1.3节第一个练习，最后一个数字表示第几个练习，前面的数字表示第几节。 
