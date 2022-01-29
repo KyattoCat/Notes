@@ -1,6 +1,6 @@
 # OpenGL
 
-基于OpenGL编程指南第九版、LearnOpenGL-CN和OpenGL3.3核心模式。
+基于~~OpenGL编程指南第九版、（我发现我完全没看书啊）~~LearnOpenGL-CN和OpenGL3.3核心模式。
 
 ## 1. OpenGL概述
 
@@ -324,7 +324,7 @@ float vertices[] = {
 };
 ```
 
-我们把上面这个表示顶点的数组存进了顶点缓冲区，我们的顶点缓冲数据会被解析成下面这个样子（LOGL上的我也不知道对不对）：
+我们把上面这个表示顶点的数组存进了顶点缓冲区，我们的顶点数据将会以下面这种结构存入缓冲区：
 
 ![](images/OpenGL/vertex_attribute_pointer.png)
 
@@ -736,3 +736,214 @@ void processInput(GLFWwindow* window)
 ![](images/OpenGL/vertex_array_objects_ebo.png)
 
 LOGL上这一节有一些练习，我会自己做一遍然后放在同目录下Samples/OpenGLExercises中，命名方式会根据这一节的编号进行命名，比如1_3_1表示1.3节第一个练习，最后一个数字表示第几个练习，前面的数字表示第几节。 
+
+### 1.4 着色器
+
+在前面的1.3.4小节里，我们提到了着色器程序并且写了两个最简单的着色器程序，这一节以更加广泛的形式了解以下着色器语言GLSL。
+
+#### 1.4.1 GLSL
+
+一个典型的着色器有以下结构：
+
+```glsl
+#version version_number
+in type in_variable_name;
+in type in_variable_name;
+
+out type out_variable_name;
+
+uniform type uniform_name;
+
+int main()
+{
+    // 处理输入并进行一些图形操作
+    // ......
+    // 输出处理的结果到输出变量
+    out_variable_name = weird_stuff_we_processed;
+}
+```
+
+当我们讨论顶点着色器时，每个输入变量也叫做顶点属性（Vertex Attribute）。我们能声明的顶点属性是有上限的，不过OpenGL确保最少有16给四维顶点属性可用，我们可以通过查询`GL_MAX_VERTEX_ARRTIBS`来获取具体上限。
+
+```cpp
+int nrAttributes;
+glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &nrAttributes);
+std::cout << "Maximum nr of vertex attributes supported: " << nrAttributes << std::endl;
+```
+
+GLSL的数据类型与C语言的默认数据类型相似，同时也有两种容器类型：向量和矩阵（vec和mat）。具体的例子就不写了，和ShaderLab的float3、float4之类的用法差不多。Uniform的用法会在后面的小节中详细描述。
+
+#### 1.4.2 着色器输入与输出
+
+与ShaderLab声明结构体，Unity自动装填变量不同，GLSL使用`in`和`out`关键字来实现着色器的输入和输出。
+
+> 顶点着色器应该接收的是一种特殊形式的输入，否则就会效率低下。顶点着色器的输入特殊在，它从顶点数据中直接接收输入。为了定义顶点数据该如何管理，我们使用`location`这一元数据指定输入变量，这样我们才可以在CPU上配置顶点属性。我们已经在前面的教程看过这个了，`layout (location = 0)`。顶点着色器需要为它的输入提供一个额外的`layout`标识，这样我们才能把它链接到顶点数据。
+>
+> 另一个例外是片段着色器，它需要一个`vec4`颜色输出变量，因为片段着色器需要生成一个最终输出的颜色。如果你在片段着色器没有定义输出颜色，OpenGL会把你的物体渲染为黑色（或白色）。
+>
+> 所以，如果我们打算从一个着色器向另一个着色器发送数据，我们必须在发送方着色器中声明一个输出，在接收方着色器中声明一个类似的输入。当类型和名字都一样的时候，OpenGL就会把两个变量链接到一起，它们之间就能发送数据了（这是在链接程序对象时完成的）。为了展示这是如何工作的，我们会稍微改动一下之前教程里的那个着色器，让顶点着色器为片段着色器决定颜色。
+
+我们用1.3节的练习题第三题稍加改造一下，让顶点着色器传递一个颜色给片元着色器，我改的是fragmentShaderSource1：
+
+```glsl
+#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec4 vertexColor;
+void main()
+{
+	gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+    vertexColor = vec4(0.5, 0.0, 0.0, 1.0);
+}
+```
+
+```glsl
+#version 330 core
+in vec4 vertexColor;
+out FragColor;
+void main()
+{
+    FragColor = vertexColor;
+}
+```
+
+效果就会变成这样，我们实现了从顶点着色器传递一个颜色给片元着色器并输出：
+
+![](images/OpenGL/顶点着色器传递属性.png)
+
+#### 1.4.3 Uniform
+
+Uniform是一种从CPU中的应用向GPU中的着色器发送数据的方式，但Uniform和上一节提到的顶点属性有所不同。
+
+首先，Uniform类型变量是全局的，这表示Uniform变量在每个着色器程序对象中都是独一无二的，可以被着色器程序对象中的任意着色器访问（是着色器程序对象，ShaderProgram，而不是着色器程序）。
+
+我们再拿1.3第三练习题开刀，修改fragmentShaderSource2为：
+
+```glsl
+#version 330 core
+out vec4 FragColor;
+uniform vec4 ourColor;
+void main()
+{
+    FragColor = ourColor;
+}
+```
+
+然后在OpenGL渲染主循环中对这个Uniform变量赋值：
+
+```cpp
+while (!glfwWindowShouldClose(window))
+{
+    // ......
+    // 第一个三角形的部分
+    // ......
+    
+    // 第二个三角形的部分
+    // 使用时间改变颜色
+    GLfloat timeValue = glfwGetTime();
+    GLfloat greenValue = sin(timeValue) / 2.0f + 0.5f;
+    GLint vertexColorLocation = glGetUniformLocation(shaderProgram2, "ourColor");
+
+    glUseProgram(shaderProgram2);
+    glBindVertexArray(VAO[1]);
+
+    glUniform4f(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
+
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+	
+    // ......
+}
+```
+
+使用`glfwGetTime()`获取程序运行的秒数，再通过正弦曲线让颜色在0到1之间改变，然后将值存入`greenValue`。
+
+接着使用`glGetUniformLocation()`来动态的获取着色器程序中的`ourColor`这个Uniform变量。如果这个函数的返回值为-1则说明没有找到这个位置值，这里我就不写判断了。
+
+然后我们**必须**在使用着色器程序之后再调用`glUniformxx()`之类的Uniform变量设置函数对Uniform进行赋值。
+
+来看看效果吧：
+
+![](images/OpenGL/初次使用Uniform.gif)
+
+Uniform变量对于设置一个在渲染循环中值会改变的属性是一个十分有用的工具，但如果我们希望给每个顶点设置一个颜色时，我们就不得不用很多Uniform变量来传递数据，这不太好吧。
+
+#### 1.4.4 多值传参
+
+在之前1.3.5链接顶点属性时，提到过顶点数据存储到顶点缓冲时的样子，[坐火箭回去看一眼](#1.3.5 链接顶点属性)。现在我们往最初的顶点数据里添加一点新的东西：
+
+```cpp
+// 顶点数据
+float vertices[] = {
+    // 顶点坐标			// 颜色
+    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+    0.0f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f
+};
+```
+
+她的结构就变成这样了：
+
+![](images/OpenGL/vertex_attribute_pointer_interleaved.png)
+
+我们知道了数据的布局，就可以通过`glVertexAttribPointer`函数来对不同的属性进行赋值操作，记得要启用顶点属性：
+
+```cpp
+// 配置顶点数据
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+glEnableVertexAttribArray(0);
+glEnableVertexAttribArray(1);
+```
+
+还记得之前是什么样子吗，我把参数含义搬下来：
+
+```cpp
+// 这是最初的样子
+// 第一个参数指定我们要配置的顶点属性
+// 还记得顶点着色器里有一句 layout(location = 0) 吗
+// 就用在这里了
+// 第二个参数指定顶点属性的大小 aPos是一个vec3类型 由三个值构成 所以这里填3
+// 第三个参数指定输入数据的类型 我们用的是float类型的 填GL_FLOAT（vec类型都是由浮点数构成的）
+// 第四个参数指定是否希望输入数据标准化 映射到[0, 1]（或[-1, 1] 看是否是有符号类型的数据）
+// 这个不是很懂 她是按照什么标准进行标准化的呢 难道是变量的最小和最大值吗
+// 第五个参数叫做步长 她表示连续的顶点数据组之间的间隔 我们定为3个浮点数的字节大小
+// 第六个参数表示位置数据在缓冲中起始位置的偏移量 由于位置数据在数组的开头 所以这里填0 后面会详细解释这个参数
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+```
+
+除了第一个参数指定的位置不同，第五个参数从3个float大小变成了6个float的大小，这是因为现在我们用6个float变量来存放顶点的数据，同时在设置颜色的值时，偏移量应当是3个float的大小，不说了，看一下上面那个结构图就懂了。
+
+当然，为了获取坐标后面的颜色值，然后输出给片元着色器显示，我们要顶点和片元着色器中修改一下：
+
+```glsl
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+out vec3 ourColor;
+void main()
+{
+	gl_Position = vec4(aPos, 1.0);
+    ourColor = aColor;
+}
+```
+
+```glsl
+#version 330 core
+in vec3 ourColor;
+out vec4 FragColor;
+void main()
+{
+	FragColor = vec4(ourColor, 1.0);
+}
+```
+
+![](images/OpenGL/多值传参.png)
+
+可能有人会对颜色方面产生一些疑惑，我明明只指定了三个颜色，为什么这个三角形变成了这种 混 合 在 一 起 的感觉。我理解的是，对于由三个顶点构成的三角面来说，其内部的片元的颜色值通常是由距离三个顶点的距离进行差值得到的，比如对于最下面的那条边的中点来说，她受到左下角顶点和右下角顶点的影响是一半一半的，然后没有受到上面那个顶点的影响，所以混合的结果就是黄色。
+
+LOGL上的描述如下：
+
+> 这个图片可能不是你所期望的那种，因为我们只提供了3个颜色，而不是我们现在看到的大调色板。这是在片段着色器中进行的所谓片段插值(Fragment Interpolation)的结果。当渲染一个三角形时，光栅化(Rasterization)阶段通常会造成比原指定顶点更多的片段。光栅会根据每个片段在三角形形状上所处相对位置决定这些片段的位置。
+> 基于这些位置，它会插值(Interpolate)所有片段着色器的输入变量。比如说，我们有一个线段，上面的端点是绿色的，下面的端点是蓝色的。如果一个片段着色器在线段的70%的位置运行，它的颜色输入属性就会是一个绿色和蓝色的线性结合；更精确地说就是30%蓝 + 70%绿。
+>
+> 这正是在这个三角形中发生了什么。我们有3个顶点，和相应的3个颜色，从这个三角形的像素来看它可能包含50000左右的片段，片段着色器为这些像素进行插值颜色。如果你仔细看这些颜色就应该能明白了：红首先变成到紫再变为蓝色。片段插值会被应用到片段着色器的所有输入属性上。
+
