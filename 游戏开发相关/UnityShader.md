@@ -1,4 +1,4 @@
-# Unity Shader
+# UnityShader
 
 ## 1. 基础
 
@@ -66,7 +66,7 @@ end
 
 书上的截图：
 
-![GPU流水线](images/Unity Shader/GPU流水线.png)
+![GPU流水线](images/UnityShader/GPU流水线.png)
 
 上图中绿色表示完全可编程控制，黄色表示可配置不可编程，蓝色表示由GPU固定实现。实线框表示必须由开发人员编程实现，虚线框表示可选的。
 
@@ -144,7 +144,7 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 
   以该模型自身中心为原点的坐标系，比如一个prefab点进去，显示的坐标系就是模型空间。
 
-  ![1](images/Unity Shader/1.png)
+  ![1](images/UnityShader/1.png)
 
 - 世界空间
 
@@ -169,7 +169,7 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 
 
 
-## 2. Unity Shader 基础使用
+## 2. UnityShader 基础使用
 
 ### 2.1 基础
 
@@ -322,7 +322,7 @@ float4 frag(a2f i) : SV_TARGET
 }
 ```
 
-### 2.5 Unity Shader 内置文件
+### 2.5 UnityShader 内置文件
 
 Unity中存在一些有用的类似头文件的文件，其后缀名为`.cginc`
 
@@ -353,7 +353,7 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 ### 2.A 附表
 
-<span id="常见矩阵及其用法">常见矩阵及其用法如下表（可能会被`Unity Shader`自动升级为其他的函数实现）：</span>
+<span id="常见矩阵及其用法">常见矩阵及其用法如下表（可能会被`UnityShader`自动升级为其他的函数实现）：</span>
 
 |        变量名        | 描述                                                         |
 | :------------------: | :----------------------------------------------------------- |
@@ -425,7 +425,7 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 在Shader中，只需要使用Unity的内置变量`UNITY_LIGHTMODEL_AMBIENT`就可以获取环境光，而大多数物体是没有自发光的，如果要计算自发光也很简单，只要在片元着色器输出最后的颜色之前，将自发光颜色添加上去即可。
 
-![环境光设置](images/Unity Shader/环境光设置.png)
+![环境光设置](images/UnityShader/环境光设置.png)
 
 ### 3.A 附表
 
@@ -482,7 +482,7 @@ float4 _MainTex_ST;
 
 在Unity中导入一张纹理资源后，可以在Inspector面板上调整属性。
 
-![纹理属性](images\Unity Shader\纹理属性.png)
+![纹理属性](images\UnityShader\纹理属性.png)
 
 需要关注的是拼接模式和过滤模式，拼接模式决定了当纹理采样坐标超过[0, 1]范围后如何进行采样，过滤模式决定当纹理被拉伸时使用的滤波方式，其中有点、双线性和三线性三种，越靠后滤波效果越好。
 
@@ -603,7 +603,7 @@ Pass
 
 决定一个光源使用哪种处理模式取决于光源的类型和渲染模式。类型指的是平行光或者其他类型的光源，渲染模式指的是她是否是重要的，重要的光源将会被当作逐像素光源处理，如图所示：
 
-![光源渲染模式](images\Unity Shader\光源渲染模式.png)
+![光源渲染模式](images\UnityShader\光源渲染模式.png)
 
 在前向渲染中，当我们渲染一个物体时，Unity会根据场景中各个光源的设置以及这些光源对物体的影响程度对这些光源进行一个重要度排序，其中一定数目的光源会被当做逐像素光源处理，最多有4个光源被逐顶点处理，剩下的按SH方式处理。Unity对光源的判断规则如下：
 
@@ -614,13 +614,13 @@ Pass
 
 前向渲染的两种Pass的设置和**通常的**光照计算如图所示：
 
-![前向渲染的两种Pass](images/Unity Shader/前向渲染的两种Pass.png)
+![前向渲染的两种Pass](images/UnityShader/前向渲染的两种Pass.png)
 
 需要注意的是除了设置标签以外，还需要添加相应的编译指令`#pragma multi_compile_fwdbase`等。
 
 在Additional Pass的渲染设置中，我们还开启和设置了混合模式，这是因为通常我们希望每个Additional Pass执行的光照结果可以和上一次的结果叠加从而形成多光源影响的效果，通常选择的是`Blend One One`。
 
-对于前向渲染来说，通常Unity Shader会定义一个Base Pass和一个Additional Pass。Base Pass仅会执行一次，Additional Pass则会根据该物体的其他逐像素光源的数目被多次调用。
+对于前向渲染来说，通常UnityShader会定义一个Base Pass和一个Additional Pass。Base Pass仅会执行一次，Additional Pass则会根据该物体的其他逐像素光源的数目被多次调用。
 
 前向渲染可以使用的内置光照变量见[附表](#前向渲染可以使用的内置光照变量)，同时还可以回头看一下基础光照那一节的[附表](#UnityGC.cginc中常用函数)仅用于前向渲染的函数。
 
@@ -632,7 +632,7 @@ Pass
 
 顶点照明渲染路径我估计不会去使用了，其中可以使用的内置变量和内置函数就不列出来了，在这里截个图：
 
-<img src=".\images\Unity Shader\顶点照明渲染路径可以使用的内置.png" style="zoom: 80%;" />
+<img src=".\images\UnityShader\顶点照明渲染路径可以使用的内置.png" style="zoom: 80%;" />
 
 #### 5.1.3 延迟渲染路径
 
@@ -912,11 +912,11 @@ Shader "Custom/ForwardRendering"
 
 每一步执行的效果可以通过帧调试器查看，帧调试器打开位置如下图所示：
 
-![帧调试器打开位置](images/Unity Shader/帧调试器窗口打开位置.png)
+![帧调试器打开位置](images/UnityShader/帧调试器窗口打开位置.png)
 
 通过帧调试器可以看出，Base Pass只执行了一次，而Additional Pass执行了两次，且顺序为红点光源到绿点光源，这是由于Unity对光源的重要程度进行排序的结果，但我们并不知道Unity具体是如何排序的。
 
-![帧调试结果](images/Unity Shader/帧调试结果.png)
+![帧调试结果](images/UnityShader/帧调试结果.png)
 
 #### 5.2.3 Unity中的光照衰减
 
@@ -1168,7 +1168,7 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
 
 创建天空盒的方法很简单，在`Project`窗口下新建一个材质，并将材质的Shader设为Unity内置的`Mobile/Skybox`（书上是`Skybox/6 Sided`，两个效果貌似一样，留个问号以后看看？），然后将纹理正确地赋值，如图所示：
 
-![创建天空盒](images/Unity Shader/如何创建天空盒.png)
+![创建天空盒](images/UnityShader/如何创建天空盒.png)
 
 在Unity中，天空盒是在所有不透明物体之后渲染的，其使用的网格是一个立方体或一个细分后的球体。
 
@@ -1221,9 +1221,9 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
 
    该脚本需要被放在`Assets/Editor`目录下，成为一个编辑器脚本，然后我们就能在GameObject选项栏里找到Render into Cubemap选项，将物体的位置和导出的纹理设置好，按下Render就可以得到立方体纹理了。如图所示：
 
-   ![编辑器脚本](images/Unity Shader/渲染到立方体纹理脚本.png)
+   ![编辑器脚本](images/UnityShader/渲染到立方体纹理脚本.png)
 
-   ![渲染步骤](images/Unity Shader/渲染到立方体纹理步骤.png)
+   ![渲染步骤](images/UnityShader/渲染到立方体纹理步骤.png)
 
 #### 6.1.3 反射和折射
 
@@ -1331,7 +1331,7 @@ $$
 
 对于实际的物理规律来说，折射一般发生两次，一次是进入时发生的折射，一次是离开时发生的折射。但是想要在实时渲染中模拟出第二次折射方向是比较复杂的，而仅模拟一次得到的效果从视觉上说也还可以，所以通常我们只模拟第一次折射。
 
-![斯涅尔定律](images/Unity Shader/斯涅耳定律.png)
+![斯涅尔定律](images/UnityShader/斯涅耳定律.png)
 
 代码改动不大：
 
@@ -1482,7 +1482,7 @@ Shader "Custom/Mirror"
 
 实现效果如下图，感觉有点粗糙，这和渲染纹理的分辨率和抗锯齿等属性有关，下图为256x256：
 
-![镜面效果](images/Unity Shader/镜面效果.png)
+![镜面效果](images/UnityShader/镜面效果.png)
 
 #### 6.2.2 玻璃效果
 
@@ -2177,7 +2177,7 @@ Shader "Custom/BrightnessSaturationAndContrast"
 
 用于边缘检测的卷积核常见的有以下几种（书上的图）：
 
-![边缘检测算子](images/Unity Shader/常见边缘检测算子.png)
+![边缘检测算子](images/UnityShader/常见边缘检测算子.png)
 
 可以看到每种算子都包含两个方向的卷积核，分别用于计算水平和垂直方向上的梯度信息。整体的梯度信息一般使用分量的平方和的平方根：
 $$
@@ -2332,7 +2332,7 @@ $$
 
 高斯方程很好地模拟了邻域每个像素对当前处理像素的影响程度，即距离越近影响越大。高斯核的维数越高，模糊程度越大，使用一个NxN大小的高斯核进行卷积操作，就需要进行NxNxWxH次纹理采样，采样次数非常巨大。不过我们可以把一个二维高斯函数拆分成两个一维函数，使得采样次数降为2xNxWxH（W和H是图像的宽和高）。对于一个5x5的高斯核来说，由于其高斯值存在明显的重复，我们甚至可以只存三个权重值就可以表示一个高斯核：
 
-![高斯核](images/Unity Shader/高斯核.png)
+![高斯核](images/UnityShader/高斯核.png)
 
 代码实现如下：
 
@@ -3251,7 +3251,7 @@ Shader "Custom/MyEdgeDetectV2"
 }
 ```
 
-![效果真不错](images/Unity Shader/基于深度和法线纹理的边界检测.png)
+![效果真不错](images/UnityShader/基于深度和法线纹理的边界检测.png)
 
 
 
@@ -3261,7 +3261,7 @@ Shader "Custom/MyEdgeDetectV2"
 
 卡通风格的高光一般是一块块分界明显的纯色区域，物体的边缘通常要绘制轮廓。
 
-![](images/Unity Shader/卡通风格渲染.png)
+![](images/UnityShader/卡通风格渲染.png)
 
 ```c
 Shader "Custom/ToonShading"
@@ -3576,7 +3576,7 @@ Shader "Custom/Dissolve"
 }
 ```
 
-![](images/Unity Shader/燃烧效果.png)
+![](images/UnityShader/燃烧效果.png)
 
 效果还是可以的。
 
