@@ -1991,13 +1991,13 @@ public class PostEffectsBase : MonoBehaviour
     {
         if (SystemInfo.supportsImageEffects == false || SystemInfo.supportsRenderTextures == false)
         {
-            Debug.LogWaring("该平台不支持屏幕特效或渲染纹理");
+            Debug.LogWarning("该平台不支持屏幕特效或渲染纹理");
             return false;
         }
         return true;
     }
     
-    protected void NotSupport()
+    protected void NotSupported()
     {
         enabled = false;
     }
@@ -3506,7 +3506,7 @@ Shader "Custom/Dissolve"
 
                 clip(burn.r - _BurnAmount);
 
-                float3 tangentLightDir = normalize(i.lightDir);
+                float3 tangentLightDir = normalize(i.lightDirNew Unity Project);
                 fixed3 tangentNormal = UnpackNormal(tex2D(_BumpMap, i.uvBumpMap));
 
                 fixed3 albedo = tex2D(_MainTex, i.uvMainTex).rgb;
