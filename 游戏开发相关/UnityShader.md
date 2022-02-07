@@ -2358,7 +2358,7 @@ public class MyGaussianBlur : PostEffectsBase
     [Range(0, 4)]
     public int iterations = 3;
     [Range(0.2f, 3.0f)]
-    public float blurSpeed = 0.6f;
+    public float blurSpread = 0.6f;
     [Range(1, 8)]
     public int downSample = 2;
 
@@ -2377,7 +2377,7 @@ public class MyGaussianBlur : PostEffectsBase
             // 迭代
             for (int i = 0; i < iterations; i++)
             {
-                material.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
                 
@@ -2428,7 +2428,7 @@ Shader "Custom/MyGaussianBlur"
             half2 uv[5] : TEXCOORD0;
         };
 
-        v2f vert(appdata_img v)
+        v2f vertVertical(appdata_img v)
         {
             v2f o;
             o.pos = UnityObjectToClipPos(v.vertex);
@@ -2443,6 +2443,22 @@ Shader "Custom/MyGaussianBlur"
 
             return o;
         }
+        
+        v2f vertHorizontal(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            half2 uv = v.texcoord;
+
+            o.uv[0] = uv;
+            o.uv[1] = uv + float2(_MainTex_TexelSize.x * 1.0, 0.0) * _BlurSize;
+            o.uv[2] = uv - float2(_MainTex_TexelSize.x * 1.0, 0.0) * _BlurSize;
+            o.uv[3] = uv + float2(_MainTex_TexelSize.x * 2.0, 0.0) * _BlurSize;
+            o.uv[4] = uv - float2(_MainTex_TexelSize.x * 2.0, 0.0) * _BlurSize;
+
+            return o;
+        }
 
         fixed4 frag(v2f i) : SV_TARGET
         {
@@ -2452,7 +2468,6 @@ Shader "Custom/MyGaussianBlur"
 
             for (int it = 1; it < 3; it++)
             {
-                // 这里还挺有意思的
                 sum += tex2D(_MainTex, i.uv[it * 2 - 1]).rgb * weight[it];
                 sum += tex2D(_MainTex, i.uv[2 * it]).rgb * weight[it];
             }
@@ -2466,15 +2481,15 @@ Shader "Custom/MyGaussianBlur"
             NAME "GAUSSIAN_BLUR_VERTICAL"
 
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vertVertical
             #pragma fragment frag
             ENDCG
         }
         pass
         {
-            NAME "GAUSSIAN_BLUE_HORIZONTAL"
+            NAME "GAUSSIAN_BLUR_HORIZONTAL"
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vertHorizontal
             #pragma fragment frag
             ENDCG
         }
@@ -2514,7 +2529,7 @@ public class MyBloom : PostEffectsBase
     public int iterations = 3;
 
     [Range(0.2f, 3.0f)]
-    public float blurSpeed = 0.6f;
+    public float blurSpread = 0.6f;
 
     [Range(1, 8)]
     public int downSample = 2;
@@ -2539,7 +2554,7 @@ public class MyBloom : PostEffectsBase
             // 迭代
             for (int i = 0; i < iterations; i++)
             {
-                material.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
                 
