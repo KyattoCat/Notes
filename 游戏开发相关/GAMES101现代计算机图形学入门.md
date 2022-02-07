@@ -1,0 +1,73 @@
+# 现代计算机图形学入门
+
+## 1. 线性代数
+
+### 1.1 向量（矢量）
+
+向量两个最重要的属性：方向和长度。图形学里默认向量是列向量：$\left[\begin{matrix}x\\y\\z\end{matrix}\right]$
+
+长度为1的向量是单位向量，计算单位向量的方法：$\widehat{a}=\frac{\vec{a}}{\|\vec{a}\|}$
+
+向量运算：
+
+- 加法：向量首尾相连，整体的首和尾相连就是新向量。数学上就是各个分量相加。
+
+- 减法：将向量移动到同一起点，结果为后指前（减号后的向量的终点指向减号前的向量终点）。
+
+- 点乘：
+
+    $\vec{a}\cdot\vec{b}=\lvert\vec{a}\rvert\lvert\vec{b}\rvert\cos{\theta}$，通常用于计算夹角。点乘满足交换律、分配律和结合律。
+
+    $\vec{a}\cdot\vec{b}=x_ax_b+y_ay_b$（二维向量下的计算，以此类推）。
+
+    已知夹角也可以计算投影长度：$\vert\vec{b}_\perp\vert=\lvert\vec{b}\rvert\cos\theta$，投影可以将向量分解两个向量，其中一个向量就是$\vec{b}_\perp$，另一个向量为$\vec{b}-\vec{b}_\perp$。
+
+    向量点乘可以判断两个向量相对于一个向量的正反向，由于$\cos\theta$在$[\frac{\pi}{2}, \pi]$是负数，点乘结果是负数，说明夹角大于90°。
+
+    ![](images/计算机图形学/向量点乘判断方向.png)
+
+- 叉乘：
+
+    结果为既垂直于a向量又垂直于b向量的向量。
+
+    $$
+    \vec{a}\times\vec{b}=\left[\begin{matrix}y_az_b-y_bz_a\\z_ax_b-z_bx_a\\x_ay_b-x_by_a\end{matrix}\right]
+    $$
+    
+    也可以把a向量写成矩阵形式与b向量进行叉乘，结果相同：
+    $$
+    \vec{a}\times\vec{b}=
+    \left[\begin{matrix}
+    0 & -z_a & y_a\\
+    z_a & 0 & -x_a\\
+    -y_a & x_a & 0
+    \end{matrix}\right]
+    \left[\begin{matrix}
+    x_b\\
+    y_b\\
+    z_b
+    \end{matrix}\right]
+    $$
+    
+    
+    相同向量叉乘结果为零向量，零向量是长度为0的向量。
+    
+    叉乘不满足交换律，$\vec{a}\times\vec{b}$的结果与$\vec{b}\times\vec{a}$的结果正好方向相反，所以需要加上一个负号才能使二者等价。
+    
+    叉乘满足分配律和结合律。
+    
+    可以用叉乘定义坐标系，若$\vec{x}\times\vec{y}=+\vec{z}$，则表示这个坐标系是右手坐标系，相反则为左手坐标系。
+    
+    叉乘可以判断两个向量（平面）的相对方向，$\vec{a}\times\vec{b}$的结果如果指向z轴正方向（右手坐标系下），则b向量在a向量的左边，若指向z轴反方向，则b向量在a向量的右边。
+    
+    通过相对方向我们可以判断处一个点是否在一个面内，假设一个三角面ABC，ABC三点逆时针排列，若有一点P在三角形内部，则对于$\vec{AB}$、$\vec{BC}$、$\vec{CA}$来说，$\vec{AP}$、$\vec{BP}$、$\vec{CP}$必然在其左侧。若有任意一边不满足条件，则该点P不在三角面内。如图：
+    
+    ![](images/计算机图形学/叉乘判断点是否在面内.png)
+    
+    对于一个由三个相互垂直的单位向量$\vec{u}$,$\vec{v}$,$\vec{w}$组成的坐标系，可以将一个向量p表示到该坐标系下：
+    $$
+    \vec{p}=(\vec{p}\cdot\vec{u})\vec{u}+(\vec{p}\cdot\vec{v})\vec{v}+(\vec{p}\cdot\vec{w})\vec{w}
+    $$
+
+### 1.2 矩阵
+
