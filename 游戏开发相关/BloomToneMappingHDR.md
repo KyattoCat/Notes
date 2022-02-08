@@ -259,3 +259,197 @@ Unity默认使用伽马空间，调整方式如下图所示：
 在某些不支持线性空间的平台，也可以在着色器内部进行一些操作来实现：对采样的颜色做2.2次幂，然后在返回颜色值前对颜色做0.45次幂。由于计算次幂开销比较大，所以不能滥用。
 
 [Gamma、Linear、sRGB 和Unity Color Space，你真懂了吗？](https://zhuanlan.zhihu.com/p/66558476)
+
+## 4. Bloom
+
+效果就是把亮的地方模糊化，模拟真实摄像机的效果。
+
+为了实现Bloom效果，我们需要先提取出屏幕中的较亮区域，然后使用高斯模糊对提取出来高亮区域进行模糊处理，再与原图像进行混合。
+
+代码如下：
+
+```c#
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MyBloom : PostEffectsBase
+{
+    public Shader bloomShader;
+    private Material bloomMaterial = null;
+    public Material material
+    {
+        get
+        {
+            bloomMaterial = CheckShaderAndCreateMaterial(bloomShader, bloomMaterial);
+            return bloomMaterial;
+        }
+    }
+
+    
+    [Range(0, 4)]
+    public int iterations = 3;
+
+    [Range(0.2f, 3.0f)]
+    public float blurSpread = 0.6f;
+
+    [Range(1, 8)]
+    public int downSample = 2;
+
+    [Range(0, 4.0f)]
+    public float luminanceThreshold = 0.6f;
+
+    private void OnRenderImage(RenderTexture src, RenderTexture dest) {
+        if (material != null)
+        {
+            material.SetFloat("_LuminanceThreshold", luminanceThreshold);
+            // 降采样提高效率
+            int rtW = src.width / downSample;
+            int rtH = src.height / downSample;
+
+            RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
+            // 双线性过滤
+            buffer.filterMode = FilterMode.Bilinear;
+            // 提取较亮区域
+            Graphics.Blit(src, buffer, material, 0);
+
+            // 迭代
+            for (int i = 0; i < iterations; i++)
+            {
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
+
+                RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+                
+                Graphics.Blit(buffer, bufferTemp, material, 1);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+                bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+                Graphics.Blit(buffer, bufferTemp, material, 2);
+
+                RenderTexture.ReleaseTemporary(buffer);
+                buffer = bufferTemp;
+            }
+            // 将处理后的较量区域与源图像混合
+            material.SetTexture("_Bloom", buffer);
+            Graphics.Blit(src, dest, material, 3);
+
+            RenderTexture.ReleaseTemporary(buffer);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+```c
+Shader "Custom/MyBloom"
+{
+    Properties
+    {
+        _MainTex ("Base", 2D) = "white" {}
+        _Bloom ("Bloom", 2D) = "black" {}
+        _LuminanceThreshold ("LuminanceThreshold", Float) = 0.5
+        _BlurSize ("Blur Size", Float) = 1.0
+    }
+
+    SubShader
+    {
+        // 使用CGINCLUDE组织代码 类似与头文件一样的东西 里面的可以这个Shader中使用
+        CGINCLUDE
+        #include "UnityCG.cginc"
+        sampler2D _MainTex;
+        half4 _MainTex_TexelSize;
+        sampler2D _Bloom;
+        float _LuminanceThreshold;
+        float _BlurSize;
+
+        struct v2f
+        {
+            float4 pos : SV_POSITION;
+            half2 uv : TEXCOORD0;
+        };
+
+
+        fixed luminance(fixed4 color)
+        {
+            return 0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b;
+        }
+
+        v2f vertExractBright(appdata_img v)
+        {
+            v2f o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+            o.uv = v.texcoord;
+
+            return o;
+        }
+
+        fixed4 fragExractBright(v2f i) : SV_TARGET
+        {
+            fixed4 color = tex2D(_MainTex, i.uv);
+            fixed val = clamp(luminance(color) - _LuminanceThreshold, 0.0, 1.0);
+
+            return color * val;
+        }
+        
+        struct v2fBloom
+        {
+            float4 pos : SV_POSITION;
+            half4 uv : TEXCOORD0;
+        };
+
+        v2fBloom vertBloom(appdata_img v)
+        {
+            v2fBloom o;
+            o.pos = UnityObjectToClipPos(v.vertex);
+
+            o.uv.xy = v.texcoord;
+            o.uv.zw = v.texcoord;
+
+#if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0.0)
+            {
+                o.uv.w = 1.0 - o.uv.w;
+            }
+#endif
+
+            return o;
+        }
+
+        fixed4 fragBloom(v2fBloom i) : SV_TARGET
+        {
+            return tex2D(_MainTex, i.uv.xy) + tex2D(_Bloom, i.uv.zw);
+        }
+
+
+        ENDCG
+        ZTest Always
+        Cull Off
+        ZWrite Off
+        pass
+        {
+            CGPROGRAM
+            #pragma vertex vertExractBright
+            #pragma fragment fragExractBright
+            ENDCG
+        }
+
+        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_VERTICAL"
+        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_HORIZONTAL"
+
+        pass
+        {
+            CGPROGRAM
+            #pragma vertex vertBloom
+            #pragma fragment fragBloom
+            ENDCG
+        }
+    }
+    Fallback Off
+}
+```
+
