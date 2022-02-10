@@ -13,18 +13,19 @@
 - 矩阵：
     $$
     \left[
-    \begin{matrix}
+    \matrix{
     1 & 2 & 3 \\
     4 & 5 & 6 \\
     7 & 7 & 9
-    \end{matrix}
+    }
     \right]
     $$
     
-
 - 上面一横：$\overline{X}$
 
 - 上面一尖儿：$\widehat{a}$
+
+- 上面一撇儿：$a^\prime$
 
 - 求和：$\sum_{i=1}^n$
 

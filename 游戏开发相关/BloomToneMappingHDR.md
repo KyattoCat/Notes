@@ -20,20 +20,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
-public class GaussianBlurEffect : PostEffectsBase
+[ExecuteInEditMode]
+public class GaussianBlur : MonoBehaviour
 {
-    public Shader gaussianBlurShader;
-    private Material gaussianBlurMaterial = null;
-
-    public Material material
-    {
-        get 
-        {
-            gaussianBlurMaterial = CheckShaderAndCreateMaterial(gaussianBlurShader, gaussianBlurMaterial);
-            return gaussianBlurMaterial;
-        }
-    }
+    public Material gaussianBlurMaterial;
 
     [Range(0, 4)]
     public int iterations = 3;
@@ -43,7 +33,7 @@ public class GaussianBlurEffect : PostEffectsBase
     public int downSample = 2;
 
     private void OnRenderImage(RenderTexture src, RenderTexture dest) {
-        if (material != null)
+        if (gaussianBlurMaterial != null)
         {
             // 降采样提高效率
             int rtW = src.width / downSample;
@@ -57,17 +47,17 @@ public class GaussianBlurEffect : PostEffectsBase
             // 迭代
             for (int i = 0; i < iterations; i++)
             {
-                material.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
+                gaussianBlurMaterial.SetFloat("_BlurSize", 1.0f + i * blurSpeed);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
                 
-                Graphics.Blit(buffer, bufferTemp, material, 0);
+                Graphics.Blit(buffer, bufferTemp, gaussianBlurMaterial, 0);
 
                 RenderTexture.ReleaseTemporary(buffer);
                 buffer = bufferTemp;
                 bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
 
-                Graphics.Blit(buffer, bufferTemp, material, 1);
+                Graphics.Blit(buffer, bufferTemp, gaussianBlurMaterial, 1);
 
                 RenderTexture.ReleaseTemporary(buffer);
                 buffer = bufferTemp;
@@ -219,7 +209,7 @@ HDR原本只是用于摄影上，摄影师对同一场景拍摄不同曝光度�
 
 ### 2.2 Reinhard
 
-源自2002年的论文，[Photographic Tone Reproduction for Digital Images](https://link.zhihu.com/?target=http%3A//www.cmap.polytechnique.fr/~peyre/cours/x2005signal/hdr_photographic.pdf)。
+参数color是线性空间下的HDR颜色，adapted_lum是根据整个画面统计的亮度。
 
 ```c
 float3 ReinhardToneMapping(float3 color, float adapted_lum) 
@@ -232,6 +222,8 @@ float3 ReinhardToneMapping(float3 color, float adapted_lum)
 
 ## 3. 线性空间和伽马矫正
 
+在物理世界中，如果光的强度增加一倍，那么亮度也会增加一倍，这是线性关系。
+
 线性空间对数字化的颜色和光照强度进行加减乘除运算后的结果仍然与真实结果保持一致，而在非线性空间中就不具备这种性质。
 
 伽马一词来源于伽马曲线，伽马曲线的起源是以前人们使用伽马曲线对拍摄的图像进行伽马编码。
@@ -239,6 +231,20 @@ float3 ReinhardToneMapping(float3 color, float adapted_lum)
 以前拍照的时候，采集到的亮度和图像的像素是一一对应的，如果我们只用8bit存储像素的每个通道的话，[0, 1]区间内可以对应256种亮度值。
 
 后来人们发现人眼对光的敏感度在不同亮度下是不一样的，正常情况下，人眼对暗处的亮度变化更敏感，于是我们可以分配更多的空间来存储较暗的区域，避免空间的浪费。
+
+我们假设存在两个像素，一个像素的亮度为0.240，另一个像素为0.243。如果我们将其直接映射到[0, 255]：
+$$
+value_1=0.240*255=61.2\\
+value_2=0.243*255=61.965
+$$
+由于存储的值是整数，因此二者向下取整，表现出来的都是61这个亮度。
+
+如果我们进行一次伽马矫正：
+$$
+value_1=0.240^{0.45}*255=133.3\\
+value_1=0.243^{0.45}*255=134.1
+$$
+这样二者存储的值变成了133和134，于是二者之间实际显示的效果就被区分开了。上面说过，人眼对暗处变化比较敏感，对亮处变化不太敏感，经过伽马矫正后，我们可以用更大的范围存储较暗的部分，舍弃一些较亮部分的细节。
 
 拍照的时候一般使用0.45（这个数被称为编码伽马）来对图像进行伽马编码，因此像素为0.5时，实际亮度约为0.22：
 $$
@@ -250,7 +256,7 @@ $$
 
 >现在的液晶显示器依然保留了2.2方的解码gamma校正。但这并不是什么历史遗留问题，也不是因为CRT的物理特性，而是现代数据编码上实实在在的需求——对物理线性的颜色编码做0.45次方的gamma校正，目的是为了让颜色编码的亮度分级与人眼主观亮度感受线性对应。这样，在相同的数据位数下，图像数据可以保留更多人眼敏感的信息。以8位色为例：由于人眼对暗色调更加敏感，那就对物理线性的颜色做0.45次方的处理，也就是编码gamma。校正完成后，相当于使用了0~128的范围来表达原来与物理强度保持线性时0~55的亮度变化。因此，显示器做解码gamma的目的是为了让便于保存和传输的颜色编码变回物理线性的形式，以便人眼观察显示器时能得到与观察现实世界时相近的感受。
 
-综上，线性空间渲染时需要先进行一次2.2的矫正，将图像颜色转回线性空间进行操作，之后再用0.45编码，以抵消屏幕的2.2矫正。
+~~综上，线性空间渲染时需要先进行一次2.2的矫正，将图像颜色转回线性空间进行操作，之后再用0.45编码，以抵消屏幕的2.2矫正。~~
 
 Unity默认使用伽马空间，调整方式如下图所示：
 
@@ -269,24 +275,12 @@ Unity默认使用伽马空间，调整方式如下图所示：
 代码如下：
 
 ```c#
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-
-public class MyBloom : PostEffectsBase
+[ExecuteInEditMode]
+public class Bloom : MonoBehaviour
 {
-    public Shader bloomShader;
-    private Material bloomMaterial = null;
-    public Material material
-    {
-        get
-        {
-            bloomMaterial = CheckShaderAndCreateMaterial(bloomShader, bloomMaterial);
-            return bloomMaterial;
-        }
-    }
+    public Material bloomMaterial;
 
-    
     [Range(0, 4)]
     public int iterations = 3;
 
@@ -300,9 +294,9 @@ public class MyBloom : PostEffectsBase
     public float luminanceThreshold = 0.6f;
 
     private void OnRenderImage(RenderTexture src, RenderTexture dest) {
-        if (material != null)
+        if (bloomMaterial != null)
         {
-            material.SetFloat("_LuminanceThreshold", luminanceThreshold);
+            bloomMaterial.SetFloat("_LuminanceThreshold", luminanceThreshold);
             // 降采样提高效率
             int rtW = src.width / downSample;
             int rtH = src.height / downSample;
@@ -311,29 +305,29 @@ public class MyBloom : PostEffectsBase
             // 双线性过滤
             buffer.filterMode = FilterMode.Bilinear;
             // 提取较亮区域
-            Graphics.Blit(src, buffer, material, 0);
+            Graphics.Blit(src, buffer, bloomMaterial, 0);
 
             // 迭代
             for (int i = 0; i < iterations; i++)
             {
-                material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
+                bloomMaterial.SetFloat("_BlurSize", 1.0f + i * blurSpread);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
                 
-                Graphics.Blit(buffer, bufferTemp, material, 1);
+                Graphics.Blit(buffer, bufferTemp, bloomMaterial, 1);
 
                 RenderTexture.ReleaseTemporary(buffer);
                 buffer = bufferTemp;
                 bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
 
-                Graphics.Blit(buffer, bufferTemp, material, 2);
+                Graphics.Blit(buffer, bufferTemp, bloomMaterial, 2);
 
                 RenderTexture.ReleaseTemporary(buffer);
                 buffer = bufferTemp;
             }
             // 将处理后的较量区域与源图像混合
-            material.SetTexture("_Bloom", buffer);
-            Graphics.Blit(src, dest, material, 3);
+            bloomMaterial.SetTexture("_Bloom", buffer);
+            Graphics.Blit(src, dest, bloomMaterial, 3);
 
             RenderTexture.ReleaseTemporary(buffer);
         }
@@ -346,7 +340,7 @@ public class MyBloom : PostEffectsBase
 ```
 
 ```c
-Shader "Custom/MyBloom"
+Shader "Custom/Bloom"
 {
     Properties
     {
@@ -416,7 +410,6 @@ Shader "Custom/MyBloom"
                 o.uv.w = 1.0 - o.uv.w;
             }
 #endif
-
             return o;
         }
 
@@ -424,8 +417,6 @@ Shader "Custom/MyBloom"
         {
             return tex2D(_MainTex, i.uv.xy) + tex2D(_Bloom, i.uv.zw);
         }
-
-
         ENDCG
         ZTest Always
         Cull Off
@@ -438,8 +429,8 @@ Shader "Custom/MyBloom"
             ENDCG
         }
 
-        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_VERTICAL"
-        UsePass "Custom/MyGaussianBlur/GAUSSIAN_BLUR_HORIZONTAL"
+        UsePass "Custom/GaussianBlur/GAUSSIAN_BLUR_VERTICAL"
+        UsePass "Custom/GaussianBlur/GAUSSIAN_BLUR_HORIZONTAL"
 
         pass
         {
@@ -452,4 +443,6 @@ Shader "Custom/MyBloom"
     Fallback Off
 }
 ```
+
+人眼看到的图像，如果传到电脑中通过屏幕显示出来，就会经过2.2编码，导致图像整体变暗。
 
