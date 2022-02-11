@@ -21,24 +21,21 @@
     \right]
     $$
     
+- 单边大括号：
+    $$
+    f(x)=\left\{\matrix{1, x=0\\0, x\neq0}\right.
+    $$
+    
+
 - 上面一横：$\overline{X}$
-
 - 上面一尖儿：$\widehat{a}$
-
 - 上面一撇儿：$a^\prime$
-
 - 求和：$\sum_{i=1}^n$
-
 - 正负：$\pm$
-
 - 点乘：$\cdot$
-
 - 叉乘：$\times$
-
 - 除：$\div$
-
 - 绝对值：$\lvert{a}\rvert$
-
 - 向量长度（俩竖）：$\|\vec{a}\|$
 
 未完待续，遇到没有的再加。
