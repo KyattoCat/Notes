@@ -207,18 +207,177 @@ HDR原本只是用于摄影上，摄影师对同一场景拍摄不同曝光度�
 
 ![](images/Task/BloomHDRToneMapping/linear_tone_mapping_after.jpg)
 
-### 2.2 Reinhard
+### 2.2 不知道算不算实现
 
-参数color是线性空间下的HDR颜色，adapted_lum是根据整个画面统计的亮度。
+我觉得不算，因为我连全局亮度的对数都没得到，只能自己手动调。
 
 ```c
-float3 ReinhardToneMapping(float3 color, float adapted_lum) 
+Shader "Hidden/HDRTest"
 {
-    const float MIDDLE_GREY = 1;
-    color *= MIDDLE_GREY / adapted_lum;
-    return color / (1.0f + color);
+    Properties
+    {
+        [HideInInspector]_MainTex ("Texture", 2D) = "white" {}
+
+        _A ("A", Float) = 1.0
+        _Gamma ("伽马", Float) = 1.0
+        _Exposure ("曝光度", Float) = 1.0
+    }
+    SubShader
+    {
+        // No culling or depth
+        Cull Off ZWrite Off ZTest Always
+
+        CGINCLUDE
+
+        sampler2D _MainTex;
+
+        struct appdata
+        {
+            float4 vertex : POSITION;
+            float2 uv : TEXCOORD0;
+        };
+
+        struct v2f
+        {
+            float2 uv : TEXCOORD0;
+            float4 vertex : SV_POSITION;
+        };
+
+        v2f vert (appdata v)
+        {
+            v2f o;
+            o.vertex = UnityObjectToClipPos(v.vertex);
+            o.uv = v.uv;
+            return o;
+        }
+
+        float luminance(float3 color)
+        {
+            return 0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b;
+        }
+        ENDCG
+
+        Pass // 源自LOGL Reinhard
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            half _Exposure;
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                float3 hdrColor = tex2D(_MainTex, i.uv).rgb;
+                float3 mapped = hdrColor / (hdrColor + 1.0);
+                return fixed4(mapped, 1.0);
+            }
+            ENDCG
+        }
+
+        Pass // 源自LOGL 曝光参数的应用
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            half _Exposure;
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                float3 hdrColor = tex2D(_MainTex, i.uv).rgb;
+                float3 mapped = float3(1, 1, 1) - exp(-_Exposure * hdrColor);
+                return fixed4(mapped, 1.0);
+            }
+            ENDCG
+        }
+
+        Pass // 源自wiki 伽马矫正
+        {
+            CGPROGRAM
+            #include "UnityCG.cginc"
+            #pragma vertex vert
+            #pragma fragment frag
+
+            half _A;
+            half _Gamma;
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                // 输入的纹理是1.0的 如果这里直接输出就是要过屏幕的2.2
+                // 理论上应该要手动做一次0.45的矫正 但是过0.45整个画面就变白了很多
+                float3 hdrColor = tex2D(_MainTex, i.uv).rgb;
+                return fixed4(pow(hdrColor, _Gamma) * _A, 1.0);
+            }
+            ENDCG
+        }
+
+        Pass // 源自进化论 Filmic Tone Mapping
+        {
+            CGPROGRAM
+            #include "UnityCG.cginc"
+            #pragma vertex vert
+            #pragma fragment frag
+
+            half _Exposure;
+
+            float3 filmic(float3 color)
+            {
+                const fixed A = 0.22f;
+                const fixed B = 0.30f;
+                const fixed C = 0.10f;
+                const fixed D = 0.20f;
+                const fixed E = 0.01f;
+                const fixed F = 0.30f;
+
+                return ((color * (A * color + B * C) + D * E) / (color * (A * color + B) + D * F)) - E / F;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                const half WHITE = 11.2f;
+                float3 hdrColor = tex2D(_MainTex, i.uv).rgb;
+                return fixed4(filmic(1.6f * _Exposure * hdrColor) / filmic(WHITE), 1.0);
+
+            }
+
+            ENDCG
+        }
+
+        Pass // 源自进化论 ACES
+        {
+            CGPROGRAM
+            #include "UnityCG.cginc"
+            #pragma vertex vert
+            #pragma fragment frag
+
+            half _Exposure;
+            half _Gamma;
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                const half A = 2.51f;
+                const half B = 0.03f;
+                const half C = 2.43f;
+                const half D = 0.59f;
+                const half E = 0.14f;
+
+                float3 hdrColor = tex2D(_MainTex, i.uv).rgb;
+                hdrColor *= _Exposure;
+                float3 color = (hdrColor * (A * hdrColor + B)) / (hdrColor * (C * hdrColor + D) + E);
+
+                return fixed4(pow(color, _Gamma), 1.0);
+            }
+            ENDCG
+        }
+    }
 }
 ```
+
+
 
 ## 3. 线性空间和伽马矫正
 
