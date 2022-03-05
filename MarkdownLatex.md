@@ -26,7 +26,6 @@
     f(x)=\left\{\matrix{1, x=0\\0, x\neq0}\right.
     $$
     
-
 - 上面一横：$\overline{X}$
 - 上面一尖儿：$\widehat{a}$
 - 上面一撇儿：$a^\prime$
@@ -39,3 +38,5 @@
 - 向量长度（俩竖）：$\|\vec{a}\|$
 
 未完待续，遇到没有的再加。
+
+[教程链接](https://www.bilibili.com/video/BV1no4y1U7At)
