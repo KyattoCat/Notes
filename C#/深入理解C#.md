@@ -166,3 +166,143 @@ EventHandler handler = delegate(object sender, EventArgs args)
 
 message可以被匿名函数捕获，用作方法体内变量。实际上这是编译器完成了代码生成的操作，之后写lambda表达式时会写她是怎么捕获变量的。
 
+### 2.4 迭代器
+
+迭代器是包含迭代器块的方法或者属性。迭代器块就是包含yield return或yield break语句的代码，只能用于以下返回类型的方法或属性：
+
+- `IEnumerable`
+- `IEnumerable<T>`
+- `IEnumerator`
+- `IEnumerator<T>`
+
+根据返回类型是否是泛型类型（带有泛型参数），迭代器的生成类型也会相应的变化，如果带有泛型参数T，那么生成类型就为T，否则为object。
+
+yield return用于生成返回序列的各个值，yield break用于终止返回序列。
+
+#### 2.4.1 延迟执行
+
+延迟执行基础思想为：只在需要获取计算结果时执行代码。
+
+> ```c#
+> static IEnumerable<int> CreateSimpleIterator()
+> {
+>     yield return 10;
+>     for (int i = 0; i < 3; i++) 
+>     { 
+>         yield return i;
+>     }
+>     yield return 20;
+> }
+> // ......
+> IEnumerable<int> enumerable = CreateSimpleIterator(); 
+> using (IEnumerator<int> enumerator = enumerable.GetEnumerator())
+> {
+>     while (enumerator.MoveNext())
+>     {
+>         int value = enumerator.Current;
+>         Console.WriteLine(value);
+>     }
+> }
+> ```
+>
+> 如果读者此前不了解IEnumerable/IEnumerator（及其泛型版本）这对接口，不妨借此机会学习二者的差异。IEnumerable是可用于迭代的序列，IEnumerator则像是序列的一个游标。多个IEnumerator可以遍历同一个IEnumerable，并且不会改变IEnumerable的状态，而IEnumerator本身就是多状态的：每次调用MoveNext()，当前游标都会向前移动一个元素。
+>
+> 如果还不太清楚，可以把IEnumerable想象成一本书，把IEnumerator想象成书签。一本书可以同时有多个书签，一个书签的移动不会改变书和其他书签的状态，但是书签自身的状态（它在书中的位置）会改变。IEnumerable.GetEnumerator()方法如同一个启动过程，它请求序列来创建一个IEnumerator用于迭代，就像把一个书签插入到一本书的起始页。 
+
+上面代码第11行，在调用CreateSimpleIterator()时，其方法体的代码没有被执行，在12行调用GetEnumerator()时也没有执行，直到14行MoveNext()，执行到了yield return 10;
+
+在遇到以下情况时，迭代器代码会终止运行：
+
+- 抛出异常
+- 方法执行完毕
+- yield break语句
+- yield return语句，返回一个值
+
+> 在本例中，MoveNext()开始迭代之后，它遇到一条yield return 10语句，于是Current赋值为10，然后返回true。
+>
+> 第一次MoveNext()调用还比较好理解，之后呢？之后不可能从头开始迭代，否则这个函数就陷入无限返回10的死循环了。实际上，当MoveNext()返回时，当前方法就仿佛被暂停了。生成的代码会追踪当前的语句执行进度，还会记录一些相关状态信息，比如循环中局部变量i的值。当MoveNext()再次被调用，就会从之前的位置继续执行，这就是延迟执行名称的由来。这部分内容如果由开发人员自行实现，会比较容易出错。
+
+延迟执行的重要性在于，可以把她当作一个无限长的序列，而且不需要事先运算，可以自由选择迭代的次数。
+
+#### 2.4.2 处理finally块
+
+```c#
+static IEnumerable<string> Iterator()
+{
+    try
+    {
+        Console.WriteLine("第一个yield之前");
+        yield return "first";
+        Console.WriteLine("在两次yield之间");
+        yield return "second";
+        Console.WriteLine("第二个yield之后");
+    }
+    finally
+    {
+        Console.WriteLine("执行finally代码块");
+    }
+}
+```
+
+Q:在执行完`yield return "first";`之后会不会执行finally代码块？
+
+A:不会。在执行`yield return`语句后，执行就暂停了。也就是说，如果我手动取这个迭代器的Enumerator，然后只执行一次MoveNext()，那么也是不会执行finally块的。而如果用foreach语句执行迭代器，那么在foreach循环结束后（包括break退出）就会执行finally代码块，这是因为foreach隐含一条using语句，在跳出循环后会自动执行Dispose方法，最终调用finally块。
+
+由于上述特性，迭代器可以用于需要释放资源的地方，比如文件处理器。
+
+#### 2.4.3 迭代器实现机制
+
+[.NET 本质论 - 了解 C# foreach 的内部工作原理和使用 yield 的自定义迭代器](https://docs.microsoft.com/zh-cn/archive/msdn-magazine/2017/april/essential-net-understanding-csharp-foreach-internals-and-custom-iterators-with-yield)
+
+给我整不会了，只知道是利用状态机模式做的。
+
+```c#
+public bool MoveNext()
+{
+    try
+    {
+        switch (state)
+        {
+                // 跳转表负责跳转到方法中的正确位置
+        }
+        // 方法代码在每个yield return都会返回
+    }
+    fault // IL代码，仅在发生异常时执行
+    {
+        Dispose(); // 清理资源
+    }
+}
+```
+
+### 2.5 一些小特性
+
+#### 2.5.1 局部类型
+
+`partial`修饰符修饰，可以修饰类、结构体、接口，使其可以分成多个部分声明，一般分布于多个源文件。
+
+#### 2.5.2 静态类
+
+`static`修饰符修饰的类，需要编写全部都是静态方法的工具类，静态类可以胜任。静态类不能实例化。
+
+#### 2.5.3 get/set访问分离
+
+C#1中仅支持单一的访问修饰符，set和get用同一个。C#2可以将其分离：
+
+```c#
+private string text;
+public string Text
+{
+    get { return text; }
+    private set { text = value; }
+}
+```
+
+#### 2.5.4 其他
+
+命名空间别名。平时很少用，都是要么直接using要么全称。C#2在C#1的基础上拓展了对命名空间别名的支持，这里不写了。
+
+编译指令。#pragma后编写的东西，没用过，支持警告指令和校验和指令。
+
+固定大小缓冲区。没用过，只能用在非安全代码的结构体内部，可以为结构体分配一个固定大小的内存，使用`fixed`修饰符。
+
+InternalsVisibleTo。一个Attribute（不是类里的属性，是用[]框起来的那个属性），有一个参数指向另一个程序集。这个属性可以让指定的程序集访问该程序集中带有该属性的成员。
