@@ -2,7 +2,7 @@
 
 前面几章是回顾了C#2到C#5的发展历程，所以这里就简单写一下，毕竟后续版本会更新之前版本的特性。
 
-## 第二章 C#2
+## C#2
 
 ### 2.1 泛型
 
@@ -43,7 +43,7 @@ List<int> firstTwo = CopyAtMost(numbers, 2);
 但是，泛型类型推断不适用于构造函数，也就是创建对象时必须通过显式指定参数类型的方式创建：
 
 ```c#
-var tuple = new Tuple<int, string, int>(10, "x", 20);
+var tuple = new Tuple<int, string, int>(10, "x", 20); // var这个关键字是在C#3中推出的新特性，在下一章会写
 ```
 
 这样写确实是很麻烦的一件事，所以有人就利用类型推断来简化创建对象。
@@ -306,3 +306,178 @@ public string Text
 固定大小缓冲区。没用过，只能用在非安全代码的结构体内部，可以为结构体分配一个固定大小的内存，使用`fixed`修饰符。
 
 InternalsVisibleTo。一个Attribute（不是类里的属性，是用[]框起来的那个属性），有一个参数指向另一个程序集。这个属性可以让指定的程序集访问该程序集中带有该属性的成员。
+
+## C#3 LINQ
+
+C#3引入大量新特性，总体上都是为了LINQ服务。
+
+### 3.1 自动实现的属性
+
+```c#
+private string name;
+public string Name
+{
+    get { return name; }
+    set { name = value; }
+}
+```
+
+```c#
+public string Name { get; set; }
+```
+
+这个简化显而易见。C#3自动实现属性连字段都不需要手动声明了，她会由编译器自动创建并赋予一个名称。不过C#3中不能设置只读的自动属性，只能通过将set用private修饰来实现，也不能赋初始值，这两个瑕疵在C#6修复。
+
+### 3.2 隐式类型
+
+`var`关键字，只能用于声明局部变量，其结果依然是一个类型确定的局部变量，只是由编译器通过变量赋值的信息推断这个变量是什么类型的。
+
+```c#
+var name = "Rick";
+// 编译器通过赋值的"Rick"推断name的类型是string，所以最终生成的还是下面这句代码
+string name = "Rick";
+```
+
+要使用`var`必须满足两个条件：
+
+1. 变量声明时必须被初始化。
+2. 用于初始化变量的表达式必须具备某个类型（null是不能用来初始化的）。
+
+`var`适用于以下场景：
+
+- 变量为匿名类型，不能为其指定类型，这于LINQ相关。
+- 变量名过长，且通过初始化表达式可以轻松推断变量类型。
+- 变量的精确类型不重要。
+
+隐式类型数组可以简化代码编写：
+
+```c#
+var array = new[] { 1, 2, 3, 4, 5};
+// 多维也行
+var array = new[,] { {1, 2, 3}, {4, 5, 6} };
+```
+
+编译器通过统计数组所有元素的类型并整合成一个类型候选集，最终取出候选集中所有类型都能隐式转换的类型（包含范围最大的那个类型）作为数组类型，如果没有符合条件的那么就报错。
+
+### 3.3 对象和集合的初始化
+
+看代码最直观：
+
+```c#
+public class Order
+{
+    private readonly List<OrderItem> items = new List<OrderItem>();
+    public string OrderID { get; set; }
+    public Customer Customer { get; set; } // 欸嘿，类型名和变量名不会冲突吗
+    public List<OrderItem> Items { get { return items; } }
+}
+
+public class Customer
+{
+    public string Name { get; set; }
+    public string Address { get; set; }
+}
+
+public class OrderItem
+{
+    public string ItemID { get; set; }
+    public int Quantity { get; set; } // 这一串get set下来可谓是极大加深了C#3自动属性的印象
+}
+
+// 不使用对象初始化和集合初始化
+var customer = new Customer(); 
+customer.Name = "Jon"; 
+customer.Address = "UK"; 
+
+var item1 = new OrderItem(); 
+item1.ItemID = "abcd123"; 
+item1.Quantity = 1; 
+
+var item2 = new OrderItem(); 
+item2.ItemID = "fghi456"; 
+item2.Quantity = 2; 
+
+var order = new Order(); 
+order.OrderID = "xyz"; 
+order.Customer = customer; 
+order.Items.Add(item1); 
+order.Items.Add(item2);
+
+// 使用初始化
+var order = new Order
+{
+    OrderID = "xyz",
+    Customer = new Customer { Name = "Jon", Address = "UK" },
+    Items =
+    {
+        new OrderItem { ItemID = "abcd123", Quantity = 1 },
+        new OrderItem { ItemID = "fghi456", Quantity = 2 }
+    }
+};
+```
+
+很明显，不仅降低了冗余程度，可读性也大大增加了。
+
+#### 3.3.1 对象初始化器
+
+根据上面的代码，可以看出对象初始化器语法`{ property = initializer-value, ...}`，其中property可以是字段或属性，initializer-value是用于初始化的值，可以是表达式、集合初始化器或者其他对象初始化器。
+
+如果对象的构造函数没有参数，使用对象初始化器就可以省略()，就像上面代码一样。对象初始化器实际访问了属性的set访问器。
+
+如果初始化值是另一个对象初始化器、，则不会调用set访问器，而是会调用get访问器，并将对象初始化器的结果用在get访问器返回的属性上。（不理解的看下面代码）
+
+```c#
+HttpClient client = new HttpClient
+{
+    DefaultRequestHeaders = // 调用get 
+    {
+        From = "user@example.com", // 调用set
+        Date = DateTimeOffset.UtcNow // 调用set
+    }
+};
+// 上面的代码等同于
+HttpClient client = new HttpClient();
+var headers = client.DefaultRequestHeaders; // 调用get
+headers.From = "user@example.com"; // 调用set
+headers.Date = DateTimeOffset.UtcNow; // 调用set
+```
+
+#### 3.3.2 集合初始化器
+
+语法为`{ initializer-value, initializer-value, ... }`，initializer-value是用于初始化的值，可以是表达式或者另一个集合初始化器。集合初始化器只能用于构造器调用或者对象初始化器中。
+
+构造器调用就是下面这样：
+
+```c#
+var beatles = new List<string> { "John", "Paul", "Ringo", "George" };
+// 等同于
+var beatles = new List<string>();
+beatles.Add("John");
+beatles.Add("Paul");
+beatles.Add("Ringo");
+beatles.Add("George");
+```
+
+编译器会转换成如上形式，会调用集合类型的Add方法，如果是字典这种一个元素多个变量的类型（键值对），则用大括号。
+
+```c#
+var releaseYears = new Dictionary<string, int>
+{
+     { "Please please me", 1963 },
+     { "Revolver", 1966 },
+     { "Sgt. Pepper’s Lonely Hearts Club Band", 1967 },
+     { "Abbey Road", 1970 }
+};
+// 等同于
+var releaseYears = new Dictionary<string, int>();
+releaseYears.Add("Please please me", 1963);
+releaseYears.Add("Revolver", 1966);
+releaseYears.Add("Sgt. Pepper’s Lonely Hearts Club Band", 1967);
+releaseYears.Add("Abbey Road", 1970);
+```
+
+这也要求使用集合初始化器的类型必须是实现IEnumerable接口的类型。
+
+#### 3.3.3 与LINQ的关系
+
+> 读者可能会好奇：这些特性对于LINQ有什么用呢？前面曾提过，几乎C# 3的所有特性都是为LINQ服务的，那么对象初始化器和集合初始化器的作用何在呢？答案就是：与LINQ相关的其他特性都要求代码具备单一表达式的表达能力。（例如在一个查询表达式中，对于一个给定的输入，select子句不支持通过多条语句生成结果。） 
