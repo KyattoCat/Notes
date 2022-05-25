@@ -10,7 +10,7 @@
 
 自C#2后，为了解决C#1中适用一个特定类型集合就需要自己创建一个新的类型，出现了泛型。
 
-并非所有类型或类型成员都适用泛型，比如枚举不能声明为泛型，字段、属性、索引器（索引器是什么？）、构造器、终结器、事件（那Action<T>是啥？）不能被声明为泛型。
+并非所有类型或类型成员都适用泛型，比如枚举不能声明为泛型，字段、属性、索引器、构造器、终结器、事件（那`Action<T>`是啥？）不能被声明为泛型。
 
 下面有个例子:
 
@@ -157,10 +157,10 @@ EventHandler handler = delegate(object sender, EventArgs args)
 > ```c#
 > void AddClickLogger(Control control, string message)
 > {
->     control.Click += delegate
->     {
->         Console.WriteLine("Control Clicked: {0}", message);
->     }
+>         control.Click += delegate
+>         {
+>             Console.WriteLine("Control Clicked: {0}", message);
+>         }
 > }
 > ```
 
@@ -481,3 +481,479 @@ releaseYears.Add("Abbey Road", 1970);
 #### 3.3.3 与LINQ的关系
 
 > 读者可能会好奇：这些特性对于LINQ有什么用呢？前面曾提过，几乎C# 3的所有特性都是为LINQ服务的，那么对象初始化器和集合初始化器的作用何在呢？答案就是：与LINQ相关的其他特性都要求代码具备单一表达式的表达能力。（例如在一个查询表达式中，对于一个给定的输入，select子句不支持通过多条语句生成结果。） 
+
+### 3.4 匿名类型
+
+#### 3.4.1 基本语法
+
+```c#
+var player = new
+{
+    Name = "Rajesh",
+    Score = 3500
+};
+```
+
+- 匿名类型语法类似对象初始化器，但无需指定类型名称，该类型内部还可以继续嵌套匿名类型。
+- 使用var关键字，因为不知道是什么类型的，虽然object也可以，不过一般不用object。
+- 内部属性类型通过自动推断确定，所以匿名类型本质还是静态类型。
+
+> 匿名类型有哪些用途呢？这就涉及LINQ了。当执行一个查询时，不管被查询的数据源是SQL数据库还是对象集合，经常需要一种特定的、不同于源数据、只在查询语句中有意义的数据形态。
+>
+> 假设有一个集合，集合中每个人都有最喜欢的颜色。我们需要把查询结果绘制成一张直方图，该查询结果集按照颜色和喜欢该颜色的人数进行划分，于是这个数据形态所代表的含义只在这个特定的上下文中有意义。使用匿名类型可以更精练地表达这种“一次性”的类型需求，同时还不失静态类型的优势。
+
+匿名类型还有一种简化创建表达式的方式，称为投射初始化器，使用该方式会使匿名类型中的属性或字段名称与初始化时用的值相同：
+
+```c#
+// 借用3.3.1的Order类
+var flattenedItem = new
+{
+    order.OrderID,
+    customer.Address,
+    item.ItemID,
+    item.Quantity
+};
+// 等同于
+var flattenedItem = new
+{
+    OrderID = order.OrderID,
+    Address = customer.Address,
+    ItemID = item.ItemID,
+    Quantity = item.Quantity
+};
+```
+
+但是我觉得这种方式不太好，一旦初始化值的属性名称改变了，匿名类型里的变量名称也会跟着改变，使用到匿名类型变量的代码会不会出现一些问题？
+
+#### 3.4.2 编译器生成类型
+
+匿名类型最终还是有自己的实际类型的，这是由编译器自动生成的。
+
+> 当采用微软C#编译器时，匿名类型具备以下特点。
+>
+> - 它是一个类（保证）。
+>
+> - 其基类是object（保证）。
+>
+> - 该类是密封的（不保证，虽然非密封的类并没有什么优势）。
+> - 属性是只读的（保证）。
+> - 构造器的参数名称与属性名称保持一致（不保证，有时对于反射有用）。
+> - 对于程序集是internal的（不保证，在处理动态类型时会比较棘 手）。
+> - 该类会覆盖GetHashCode()和Equals()方法：两个匿名类型只有在所 有属性都等价的情况下才等价。（可以正常处理null值。）只保证会覆盖这两个方法，但不保证散列值的计算方式。
+> - 覆盖并完善ToString()方法，用于呈现各属性名称及其对应值。这一点不保证，但对于问题诊断来说作用重大。
+> - 该类型为泛型类，其类型形参会应用于每一个属性。具有相同属性名称但属性类型不同的匿名类型，会使用相同的泛型类型，但拥有不同的类型实参。这一点不保证，不同编译器的实现方式不同。
+> - 如果两个匿名对象创建表达式使用相同的属性名称，具有相同的属性类型以及属性顺序，并且在同一个程序集中，那么这两个对象的类型相同。
+
+匿名类型也可以用于创建隐式类型数组，但是必须满足上面引用原文中的最后一个条件：相同属性类型、相同顺序、相同程序集。
+
+#### 3.4.A
+
+只是说说我自己的看法，匿名类型似乎局限性蛮大的，而且感觉可读性反而不是很好，目前在项目中没有见过任何匿名类型。
+
+### 3.5 lambda表达式
+
+自C#3引入lambda表达式，通过内联代码的方式创建委托实例的过程变得更简洁了（之前的创建过程见2.3.2委托的匿名方法创建）。
+
+> C#的设计团队出于各种必要的原因，花费大量精力来简化委托实例的创建过程，其中LINQ是最重要的一个原因。
+
+#### 3.5.1 lambda表达式语法
+
+```C#
+// 原
+Action<string> action = delegate(string message)
+{
+    Console.WriteLine("In delegate: {0}", message);
+};
+action("Message");
+// 引入lambda
+// 参数列表 => 主体
+Action<string> action = (string message) =>
+{
+    Console.WriteLine("In delegate: {0}", message);
+};
+action("Message");
+```
+
+看起来貌似差不多嘛，也就把`delegate`省略了然后加了一个`=>`这玩意儿代替，不过在特殊场景下，lambda表达式还能更短。
+
+```c#
+Action<string> action =
+    (string message) => Console.WriteLine("In delegate: {0}", message); // 单句表达式可以省略大括号
+Action<string> action =
+    (message) => Console.WriteLine("In delegate: {0}", message); // 由于action是Action<string>类型的，所以参数类型可以被推断出来
+Action<string> action =
+    message => Console.WriteLine("In delegate: {0}", message); // 这种情况甚至可以把括号省略
+```
+
+```c#
+Func<int, int, int> multiply = (int x, int y) => { return x * y; }; // 原始版本
+Func<int, int, int> multiply = (int x, int y) => x * y; // 仅一条return语句，可以省略return和大括号
+Func<int, int, int> multiply = (x, y) => x * y; // 由于有两个参数所以小括号不能省了，类型依旧由编译器推断
+```
+
+总结一下特殊场景：
+
+- 仅一句表达式（省略大括号）
+- 仅一句return语句（省略大括号和return）
+- 参数可以推断（省略参数类型）
+- 仅一个参数（省略小括号）
+
+#### 3.5.2 捕获变量
+
+在lambda表达式内，可以像普通方法一样使用变量，比如类里的字段、this变量、方法的参数、局部变量。lambda表达式携带的参数不属于捕获变量的范畴，因为她是在lambda表达式局部内的。需要注意的是，在捕获变量时，lambda表达式捕获的是变量本身，而不是创建委托实例时的变量值，也就是在创建委托实例后，修改了捕获的变量的值，那么委托执行时输出的变量也时修改后的。
+
+```c#
+class CapturedVariablesDemo 
+{ 
+    private string instanceField = "instance field"; 
+    public Action<string> CreateAction(string methodParameter) 
+    { 
+        string methodLocal = "method local"; 
+        string uncaptured = "uncaptured local"; 
+        Action<string> action = lambdaParameter => 
+        {
+            string lambdaLocal = "lambda local"; 
+            Console.WriteLine("Instance field: {0}", instanceField); // 实例字段
+            Console.WriteLine("Method parameter: {0}", methodParameter); // 方法参数
+            Console.WriteLine("Method local: {0}", methodLocal); // 方法局部变量
+            Console.WriteLine("Lambda parameter: {0}", lambdaParameter); // lambda表达式参数
+            Console.WriteLine("Lambda local: {0}", lambdaLocal); // lambda表达式局部变量
+        };
+        methodLocal = "modified method local"; 
+        return action; 
+    } 
+}
+// 执行委托
+var demo = new CapturedVariablesDemo();
+Action<string> action = demo.CreateAction("method argument");
+action("lambda argument");
+```
+
+> - 如果没有捕获任何变量，那么编译器可以创建一个静态方法，不需要额外的上下文。 
+>
+> - 如果仅捕获了实例字段，那么编译器可以创建一个实例方法。在这种情况下，捕获1个实例字段和捕获100个没有什么差别，只需一个this便可都可以访问到。 
+>
+> - 如果有局部变量或参数被捕获，编译器会创建一个私有的嵌套类来保存上下文信息，然后在当前类中创建一个实例方法来容纳原lambda表达式的内容。原先包含lambda表达式的方法会被修改为使用嵌套类来访问捕获变量。
+>
+> 具体实现细节因编译器而异。
+
+```c#
+// lambda表达式转译后代码 因为编译器不会真正生成C#代码 这里只是展示捕获原理
+private class LambdaContext // 生成私有嵌套类保存捕获变量 
+{
+    public CapturedVariablesDemoImpl originalThis; // 捕获的变量 
+    public string methodParameter; 
+    public string methodLocal; 
+
+    public void Method(string lambdaParameter) // lambda表达式体变成一个实例方法 
+    { 
+        string lambdaLocal = "lambda local"; 
+        Console.WriteLine("Instance field: {0}", 
+        originalThis.instanceField); 
+        Console.WriteLine("Method parameter: {0}", methodParameter); 
+        Console.WriteLine("Method local: {0}", methodLocal); 
+        Console.WriteLine("Lambda parameter: {0}", lambdaParameter); 
+        Console.WriteLine("Lambda local: {0}", lambdaLocal); 
+    } 
+}
+
+public Action<string> CreateAction(string methodParameter) 
+{ 
+    LambdaContext context = new LambdaContext(); // 生成类用于所有捕获的变量 
+    context.originalThis = this; 
+    context.methodParameter = methodParameter; 
+    context.methodLocal = "method local"; 
+    string uncaptured = "uncaptured local"; 
+    Action<string> action = context.Method; 
+    context.methodLocal = "modified method local"; 
+    return action; 
+}
+```
+
+根据上面代码可以看出lambda表达式是如何捕获变量的。下面再看一种情况，被捕获的局部变量是被多次实例化的：
+
+```c#
+static List<Action> CreateActions()
+{
+    List<Action> actions = new List<Action>();
+    for (int i = 0; i < 5; i++)
+    {
+        string text = string.Format("message {0}", i);
+        actions.Add(() => Console.WriteLine(text));
+    }
+    return actions;
+}
+```
+
+如上所示，text变量在循环内多次实例化，每个text对于lambda表达式都是独立的。其实就相当于创建了多个私有类对象，对象内的text引用指向的是各个循环中属于这个对象的text。
+
+```c#
+private class LambdaContext
+{
+    public string text;
+    public void Method()
+    {
+        Console.WriteLine(text);
+    }
+}
+static List<Action> CreateActions()
+{
+    List<Action> actions = new List<Action>();
+    for (int i = 0; i < 5; i++)
+    {
+        LambdaContext context = new LambdaContext(); // 每次循环创建一个对象
+        context.text = string.Format("message {0}", i); // 所以每个对象的text都是独立的
+        actions.Add(context.Method); // 用这个对象来创建Action
+    }
+    return actions;
+}
+```
+
+最后看一下捕获不同作用域的变量会发生什么：
+
+```c#
+static List<Action> CreateCountingActions()
+{
+    List<Action> actions = new List<Action>();
+    int outerCounter = 0; // 这个变量是方法局部变量 被两个委托捕获
+    for (int i = 0; i < 2; i++)
+    {
+        int innerCounter = 0; // 循环内的局部变量 和之前情况一样会创建多个实例 对于两个委托来说是独立的
+        Action action = () =>
+        {
+            Console.WriteLine("Outer: {0}; Inner: {1}", outerCounter, innerCounter);
+            outerCounter++;
+            innerCounter++;
+        };
+        actions.Add(action);
+    }
+    return actions;
+}
+
+List<Action> actions = CreateCountingActions();
+actions[0](); // Outer: 0; Inner: 0
+actions[0](); // Outer: 1; Inner: 1
+actions[1](); // Outer: 2; Inner: 0
+actions[1](); // Outer: 3; Inner: 1
+```
+
+这种情况编译器会怎么创建私有类？答案是会创建多个私有类：
+
+```c#
+private class OuterContext // 外层作用域上下文
+{
+    public int outerCounter; // 外层的变量
+}
+
+private class InnerContex // 内层作用域上下文
+{
+    public OuterContext outerContext; // 包含外层上下文的引用
+    public int innerCounter; // 内层的变量
+    
+    public void Method()
+    {
+        Console.WriteLine("Outer: {0}; Inner: {1}", outerContext.outerCounter, innerCounter);
+        outerContext.outerCounter++;
+        innerCounter++;
+    }
+}
+
+static List<Action> CreateCountingActions()
+{
+    List<Action> actions = new List<Action>();
+    OuterContext outerContext = new OuterContext(); // 创建外层上下文保存变量
+    outerContext.outerCounter = 0;
+    for (int i = 0; i < 2; i++)
+    {
+        InnerContext innerContext = new InnerContext(); // 内层则与之前一样多次创建
+        innerContext.outerContext = outerContext;
+        innerContext.innerCounter = 0;
+        Action action = innerContext.Method;
+        actions.Add(action);
+    }
+    return actions;
+}
+```
+
+这意味着在使用lambda表达式时需要注意可能会由于捕获变量导致编译器创建过多对象而影响性能。
+
+#### 3.5.3 表达式树
+
+把代码当文本使！
+
+```c#
+Expression<Func<int, int, int>> adder = (x, y) => x + y;
+Console.WriteLine(adder); // 猜猜打印出什么？ "(x, y) => x + y"！ //不过在我电脑上打印出来的是(x, y) => (x + y)
+```
+
+编译器并没有在任何地方创建一个硬编码的字符串，上面的打印结果是表达式树动态构建出来的，这意味着代码是可以在执行时进行检查的。
+
+看着挺短，这是编译器帮我们做了很多事情，如果手动构建表达式树还挺麻烦的：
+
+```c#
+ParameterExpression xParameter = Expression.Parameter(typeof(int), "x");
+ParameterExpression yParameter = Expression.Parameter(typeof(int), "y");
+Expression body = Expression.Add(xParameter, yParameter);
+ParameterExpression[] parameters = new[] { xParameter, yParameter };
+Expression<Func<int, int, int>> adder = Expression.Lambda<Func<int, int, int>>(body, parameters);
+Console.WriteLine(adder);
+```
+
+lambda转换为表达式树是存在限制的，只有一个表达式主体的lambda表达式才能转换为表达式树
+
+上面代码中`(x, y) => x + y`可以转换，但是`(x, y) => { return x + y;}`就不行了。
+
+这也引出对象和集合初始化器的重要性，因为她们可以在一个表达式内完成初始化工作，所以才能用在表达式树上：
+
+```c#
+Expression<Func<int, int, Test>> adder = (x, y) => new Test{ X = x, Y = y }; // 对象初始化
+Expression<Func<int, int, List<int>>> adder = (x, y) => new List<int>{ x, y }; // 集合初始化
+Expression<Func<int, int, object>> adder = (x, y) => new { X = x, Y = y }; // 匿名类型
+```
+
+构建好表达式树后，可以通过表达式树动态创建委托：
+
+```、c#
+Expression<Func<int, int, int>> adder = (x, y) => x + y;
+Func<int, int, int> executableAdder = adder.Compile();  // 有一个Compile方法可以编译表达式树
+Console.WriteLine(executableAdder(2, 3)); // 可以正常调用委托
+```
+
+~~虽然我觉得如果真要用这个表达式树做动态委托创建还是很麻烦的事。~~
+
+> 这项能力可以和反射特性搭配使用，用于访问属性、调用方法来生成并缓存委托，其结果与手动编写委托结果相同。对于单一的方法调用或访问属性，已经存在现有的方法来直接创建委托，不过有时需要额外的转换或操作步骤，而使用表达式树来实现的话十分简便。
+>
+> 等到介绍完所有相关特性之后，我们再回头讨论为什么表达式树对于LINQ如此重要。
+
+### 3.6 扩展方法
+
+通过编写静态方法扩展原有类的方法，语法：
+
+```c#
+public static class DictionaryExtensions
+{
+    public static TValue GetValue<TKey, TValue>(this Dictionary<TKey, TValue> dict, TKey key)
+    {
+        // 处理一些东西
+        return default;
+    }
+}
+
+Dictionary<int, int> dict = new Dictionary<int, int>();
+Console.WriteLine(dict.GetValue(1)); // 输出0，因为default(int) == 0
+```
+
+关键在于第一个参数前加上一个`this`关键字，参数类型就是你希望扩展的类型。
+
+查找扩展方法的优先级顺序如下：
+
+1. 同命名空间下的静态类
+2. 父命名空间下的静态类
+3. 全局命名空间下的静态类
+4. using指定的命名空间下的静态类
+5. （仅在C#6中）using static指定的静态类
+
+还有一个问题就是null调用的问题：
+
+`x.GetValue(1); // x == null`
+
+如果GetValue是实例方法，那么会报空引用的错误。如果GetValue是扩展方法，那么还是会调用扩展方法。所以扩展方法应当要对null值做特殊处理。
+
+下面展示一个扩展方法的链式调用：
+
+```c#
+string[] words = { "keys", "coat", "laptop", "bottle" }; 
+IEnumerable<string> query = words
+    .Where(word => word.Length > 4) 
+    .OrderBy(word => word) 
+    .Select(word => word.ToUpper()); 
+```
+
+是不是很眼熟？yep，很像SQL语句。
+
+如果不用扩展方法，而是普通的静态方法做相同查询，那代码就有点emmm：
+
+```c#
+string[] words = { "keys", "coat", "laptop", "bottle" };
+IEnumerable<string> query =
+    Enumerable.Select(
+        Enumerable.OrderBy(
+            Enumerable.Where(words, word => word.Length > 4),
+            word => word),
+        word => word.ToUpper());
+```
+
+可读性低到爆炸，Where明明需要第一个调用，但是在上面代码里面却是嵌在最里面那一层的。改进方法显而易见，用临时变量存上个方法执行的结果：
+
+```c#
+string[] words = { "keys", "coat", "laptop", "bottle" };
+var tmp1 = Enumerable.Where(words, word => word.Length > 4);
+var tmp2 = Enumerable.OrderBy(tmp1, word => word);
+var query = Enumerable.Select(tmp2, word => word.ToUpper());
+```
+
+顺序正常了，但是容易出现大量局部变量混杂在一起，分散注意力，所以还是扩展方法那一版看起来比较好。
+
+### 3.7 查询表达式
+
+该特性是专门为LINQ设计的，目的就是为了再次简化查询代码。下面的查询代码等价于3.6中出现的那个扩展方法链式调用查询。
+
+```c#
+IEnumerable<string> query = from word in words
+                            where word.Length > 4
+                            orderby word
+                            select word.ToUpper();
+```
+
+~~（已经完全变成SQL的形状了（呜~））~~
+
+3.5.2节捕获变量中代码是通过转译为C#代码后来讲解的，实际上编译器不会生成任何C#代码。但是查询表达式被C#语言规范直接定义为一种语法转译，上面代码转译后的结果就和3.6中链式调用查询的代码形式一致。
+
+然后引入两个概念：范围变量和隐形标识符。
+
+```c#
+from word in words // 这里由from子句引入的word就是范围变量
+where word.Length > 4 // 后续可以使用word
+orderby word
+select word.ToUpper();
+```
+
+```c#
+from word in words
+let length = word.Length // 还可以使用let关键字指定新的范围变量
+where length > 4
+orderby length
+select string.Format("{0}: {1}", length, word.ToUpper());
+```
+
+由上面代码转译后的代码如下：
+
+```c#
+words.Select(word => new { word, length = word.Length }) // 多个范围变量出现时就会被转为匿名类型
+    .Where(tmp => tmp.length > 4) // 这里的tmp并没有在查询表达式中出现
+    .OrderBy(tmp => tmp.length)   // 实际上tmp不属于转译的一部分，语言规范并没有规定参数名称
+    .Select(tmp =>                // 这个参数tmp在写查询时是不可见的，所以称为隐形标识符
+         string.Format("{0}: {1}", tmp.length, tmp.word.ToUpper()));
+```
+
+虽然但是，在某些情况下，查询表达式是没有使用扩展方法查询简洁的，所以要看情况使用合适的方法。
+
+### 3.8 LINQ
+
+> ```c#
+> var products = from product in dbContext.Products
+>                where product.StockCount > 0
+>                orderby product.Price descending
+>                select new { product.Name, product.Price };
+> ```
+>
+> 短短4行代码，应用了所有新特性。 
+>
+> - 匿名类型，包括投射初始化器（只选择name和price这两个属性）。 
+> - 使用var声明的匿名类型，因为无法声明products变量的有效类型。
+> - 查询表达式。当然对于本例可以不使用查询表达式，但对于更复杂的情况，使用查询表达式能事半功倍。 
+> - lambda表达式。lambda表达式在这里作为查询表达式转译之后的结果。
+> - 扩展方法。它使得转译后的查询可以通过Queryable类实现，因为dbContext.Products实现了IQueryable<Product>接口。 
+> - 表达式树。它使得查询逻辑可以按照数据的方式传给LINQ提供器，然后转换成SQL语句并交由数据库执行。 
+>
+> 不管缺少上述哪个特性，LINQ的实用性都将大打折扣。虽然我们可以用内存集合来取代表达式树，虽然不用查询表达式也能写出可读性比较强的简单查询，虽然不用扩展方法也可以使用专用的类配合相关方法，但是这些特性加在一起将别开生面。
