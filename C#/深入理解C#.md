@@ -8,9 +8,9 @@
 
 #### 2.1.1 泛型
 
-自C#2后，为了解决C#1中适用一个特定类型集合就需要自己创建一个新的类型，出现了泛型。
+自C#2后，为了解决C#1中使用一个特定类型集合就需要自己创建一个新的类型，出现了泛型。
 
-并非所有类型或类型成员都适用泛型，比如枚举不能声明为泛型，字段、属性、索引器、构造器、终结器、事件（那`Action<T>`是啥？）不能被声明为泛型。
+并非所有类型或类型成员都适用泛型，比如枚举不能声明为泛型，字段、属性、索引器、构造器、终结器、事件不能被声明为泛型。
 
 下面有个例子:
 
@@ -957,3 +957,157 @@ words.Select(word => new { word, length = word.Length }) // 多个范围变量�
 > - 表达式树。它使得查询逻辑可以按照数据的方式传给LINQ提供器，然后转换成SQL语句并交由数据库执行。 
 >
 > 不管缺少上述哪个特性，LINQ的实用性都将大打折扣。虽然我们可以用内存集合来取代表达式树，虽然不用查询表达式也能写出可读性比较强的简单查询，虽然不用扩展方法也可以使用专用的类配合相关方法，但是这些特性加在一起将别开生面。
+
+## C#4
+
+### 4.1 动态类型
+
+语法很简单，`dynamic`关键字：
+
+```c#
+dynamic text = "hello world"; 
+string world = text.Substring(6); 
+Console.WriteLine(world);
+string broken = text.SUBSTR(6);  // 没有这个方法，但是编译时不会报错，而是运行时报错
+Console.WriteLine(broken);
+```
+
+以我目前水平完全没有接触到dynamic（不如说我本能的在静态语言里抗拒使用动态类型），这里就补充一些文章：
+
+1. [使用类型 dynamic（C# 编程指南）](https://docs.microsoft.com/zh-cn/dotnet/csharp/programming-guide/types/using-type-dynamic)
+2. [Working with the Dynamic Type in C#](https://www.red-gate.com/simple-talk/development/dotnet-development/working-with-the-dynamic-type-in-c/)
+
+### 4.2 可选形参和命名实参
+
+代码一看就懂：
+
+```c#
+static void Method(int x, int y = 5, int z = 10) // 这个就是带默认值的可选形参
+{
+    Console.WriteLine($"x = {x}, y = {y}, z = {z}");
+}
+// ...
+Method(1); // 因为参数可选，所以等同Method(1, 5, 10)
+Method(x:10, z:20); // 这个就是命名实参，可以指定形参赋值，可以不按照形参顺序 等同Method(10, 5, 20)
+Method(1, z:2, y:3); // 不带名称的参数称为定位实参，定位实参必须在命名实参前
+```
+
+限制：
+
+1. 带默认值的可选形参必须在形参列表的最后，除了params形参数组
+2. 调用时命名实参必须在定位实参之后（C#7.2后有所放宽）
+3. 定位实参和命名实参不能重复（比如`Method(1, x : 2)`就是非法的，因为参数x重复）
+4. 对于`ref`和`out`修饰的形参不能有默认值
+5. 默认值必须是编译时可以确定的常量值（null，数值，字符串）
+6. 默认值可以是default表达式（像是`default(TestClass)`这样的，其实也是一个常量值）
+7. 默认值可以是值类型的new表达式（注意只能是值类型）
+
+形参默认值会被嵌入到IL代码中。
+
+### 4.3 COM互操作性
+
+跳过。
+
+### 4.4 泛型型变
+
+```c#
+IEnumerable<string> strings = new List<string> { "a", "b", "c" };
+IEnumerable<object> objects = strings;
+```
+
+上面的代码有啥问题吗？string类型也是object类型对吧，那么string类型的序列自然也是object类型的序列对吧，所以上面的代码没啥问题。
+
+但是，这在C#4之前确实时不能通过编译的，而且如果将序列拓展为列表，代码却不能过编译了：
+
+```c#
+IList<string> strings = new List<string> { "a", "b", "c" };
+IList<object> objects = strings; // 无法通过编译
+```
+
+为什么呢？这是因为读写的问题。
+
+对于序列`IEnumerable<T>`，T类型变量只作输出，对于`IList<T>`是可以通过Add方法添加T类型的数据的。
+
+```c#
+IList<string> strings = new List<string> { "a", "b", "c" };
+IList<object> objects = strings;
+objects.Add(new object());
+string element = strings[3];
+```
+
+> 除第2行外，其他代码单独看都没有问题。把一个object类型的引用添加到`IList<object>`列表中没有问题，从`IList<string>`类型的列表中读取一个`string`的元素中也没有问题。可是如果允许把`string`类型的列表看作`object`类型的列表，上面两个行为就会发生冲突。因此C#从语言规则上禁止第2行代码，以保证另外两个操作是安全的。 
+
+还有一种情况，T类型只做输入，比如`Action<T>`。
+
+```c#
+Action<object> objectAction = obj => Console.WriteLine(obj);
+Action<string> stringAction = objectAction;
+stringAction("Print me");
+```
+
+对于一个可以接收object类型的Action，必然可以接收string类型。
+
+定义：
+
+- 协变。泛型只作输出。
+- 逆变。泛型只作输入。
+- 不变。泛型既作输出也作输入。
+
+> C#变体的第一要点：变体只能用于接口和委托，例如类或结构体的协变是不存在的。第二：变体的定义与每一个具体的类型形参绑定。可以概括地说“`IEnumerable<T>`是协变的”，而更准确的说法是“`IEnumerable<T>`对于类型T是协变的”。C#为此还推出了新语法：在声明接口和委托的语法中，可以为每个类型形参添加独立修饰符。`IEnumerable<T>`和`IList<T>`接口以及`Action<T>`委托的声明方式如下： 
+>
+> ```c#
+> public interface IEnumerable<out T>  // T协变
+> public delegate void Action<in T> // T 逆变
+> public interface IList<T> // T 不变
+> ```
+
+使用in、out等关键字修饰的委托或接口一旦出现违背修饰符的情况就会报错。
+
+```c#
+public delegate void InvalidCovariant<out T>(T input) // 非法，协变用作输出
+public interface IInvalidContravariant<in T>
+{
+    T GetValue(); // 非法，逆变用作输出
+}
+```
+
+重申一下前文的要点：变体只能用于接口和委托，不能被实现接口的类或结构体继承。假设有如下类定义：
+
+```c#
+public class SimpleEnumerable<T> : IEnumerable<T> // 这里不能使用out定义协变
+{
+    // ...
+}
+
+// 类与类之间没有变体关系
+// SimpleEnumerable<string>不能转为SimpleEnumerable<object>
+// 可以利用协变将
+// SimpleEnumerable<string>转为IEnumerable<object>
+// 个人理解因为SimpleEnumerable<string>被看作IEnumerable<object>
+```
+
+> 假设我们正在处理某些委托或接口，这些委托或接口具有协变或逆变的类型形参，那么哪些类型转换是可行的呢？解释规则前先定义几个术语。
+>
+> - 包含变体的转换称为变体转换。 
+> - 变体转换属于引用转换。引用转换不改变变量的值，它只改变变量在编译时的类型。 
+> - 一致性转换指的是从一个类型转换为一个相同的（从CLR的角度看）类型。它可以是在C#中同类型之间的转换（例如string类型到string类型的转换），也可以是C#中不同类型间的转换，例如从object到dynamic的转换。 
+>
+> 假设有类型实参A和B，我们希望将`IEnumerable<A>`转换成`IEnumerable<B>`。只有存在从A到B的一致性转换或隐式引用转换时，才能完成目标转换。
+>
+> 以下转换均合法。 
+>
+> - `IEnumerable<string>`到`IEnumerable<object>`，因为子类到基类（或者基类的基类，以此类推）都属于隐式引用转换。 
+> - `IEnumerable<string>`到`IEnumerable<IConvertible>`，因为实现类到其接口的转换属于隐式引用转换。 
+> - `IEnumerable<IDisposable>`到`IEnumerable<object>`，任何引用类型到object或者dynamic类型都属于隐式引用转换。 
+>
+> 以下转换皆非法。 
+>
+> - `IEnumerable<object>`到`IEnumerable<string>`，因为object到string属于显式引用转换，而非隐式。 
+> - `IEnumerable<string>`到`IEnumerable<Stream>`：string类和Stream类属于非相关类。 
+> - `IEnumerable<int>`到`IEnumerable<IConvertible>`：int到IConvertible存在隐式类型转换，但是它属于装箱转换，而不是引用转换。 
+> - `IEnumerable<int>`到`IEnumerable<long>`：int到long存在隐式类型转换，但属于数值转换而非引用转换。
+>
+> 如上所示，类型实参的转换必须是引用转换或一致性转换的要求，出人意料地影响了值类型。
+
+对于多个泛型参数的类型比如Func委托，那么就对参数列表中所有参数进行检查。
+
