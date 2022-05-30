@@ -85,7 +85,7 @@ var tuple = Tuple.Create(10, "x", 20);
 `bool?`有些特殊，书中说把null看作一个变量，若与或非的结果取决于变量值，那么就是null。举个例子：
 
 ```c#
-true && null == null;// 该式结果取决于null
+true && null == null;// 该式结果取决于null 意思就是把null当作一个变量 (true && 变量N)的结果自然取决于N
 true || null == true;// 取决于true
 true ^ null == null; // 取决于null
 
@@ -186,22 +186,22 @@ yield return用于生成返回序列的各个值，yield break用于终止返回
 > ```c#
 > static IEnumerable<int> CreateSimpleIterator()
 > {
->     yield return 10;
->     for (int i = 0; i < 3; i++) 
->     { 
->         yield return i;
->     }
->     yield return 20;
+>        yield return 10;
+>        for (int i = 0; i < 3; i++) 
+>        { 
+>            yield return i;
+>        }
+>        yield return 20;
 > }
 > // ......
 > IEnumerable<int> enumerable = CreateSimpleIterator(); 
 > using (IEnumerator<int> enumerator = enumerable.GetEnumerator())
 > {
->     while (enumerator.MoveNext())
->     {
->         int value = enumerator.Current;
->         Console.WriteLine(value);
->     }
+>        while (enumerator.MoveNext())
+>        {
+>            int value = enumerator.Current;
+>            Console.WriteLine(value);
+>        }
 > }
 > ```
 >
@@ -248,13 +248,96 @@ Q:在执行完`yield return "first";`之后会不会执行finally代码块？
 
 A:不会。在执行`yield return`语句后，执行就暂停了。也就是说，如果我手动取这个迭代器的Enumerator，然后只执行一次MoveNext()，那么也是不会执行finally块的。而如果用foreach语句执行迭代器，那么在foreach循环结束后（包括break退出）就会执行finally代码块，这是因为foreach隐含一条using语句，在跳出循环后会自动执行Dispose方法，最终调用finally块。
 
+```c#
+// foreach的编译结果
+// 代码来自迭代器实现机制第一行给的文章
+System.Collections.Generic.Stack<int> stack =
+    new System.Collections.Generic.Stack<int>();
+int number;
+using(System.Collections.Generic.Stack<int>.Enumerator enumerator = stack.GetEnumerator())
+{
+    while (enumerator.MoveNext())
+    {
+        number = enumerator.Current;
+        Console.WriteLine(number);
+    }
+}
+```
+
+
+
 由于上述特性，迭代器可以用于需要释放资源的地方，比如文件处理器。
 
 #### 2.4.3 迭代器实现机制
 
 [.NET 本质论 - 了解 C# foreach 的内部工作原理和使用 yield 的自定义迭代器](https://docs.microsoft.com/zh-cn/archive/msdn-magazine/2017/april/essential-net-understanding-csharp-foreach-internals-and-custom-iterators-with-yield)
 
-给我整不会了，只知道是利用状态机模式做的。
+```c#
+public static IEnumerable<int> GenerateIntegers(int count)
+{
+    try
+    {
+        for (int i = 0; i < count; i++)
+        {
+            Console.WriteLine("Yielding {0}", i);
+            yield return i;
+            int doubled = i * 2; // 注意这个局部变量
+            Console.WriteLine("Yielding {0}", doubled);
+            yield return doubled;
+        }
+    }
+    finally
+    {
+        Console.WriteLine("In finally block");
+    }
+}
+```
+
+```c#
+public static IEnumerable<int> GenerateIntegers(int count) // 原方法入口
+{
+    GeneratedClass ret = new GeneratedClass(-2);
+    ret.count = count;
+    return ret; // 把状态机返回给调用方
+}
+private class GeneratedClass : IEnumerable<int>, IEnumerator<int> // 状态机的简化版本
+{
+    public int count; // 原参数
+    /// -3 MoveNext()正在执行
+    /// -2 GetEnumerator()尚未被调用
+    /// -1 执行完毕（无论成功与否）
+    /// 0  GetEnumerator被调用，尚未调用MoveNext()
+    /// 1  第一条yield return语句
+    /// 2  第二条yield return语句
+    /// N  第N条yield return语句
+    private int state; // 状态
+    private int current; 
+    private int initialThreadId; 
+    private int i; // 循环体中的局部变量i
+    // 可以看出在状态机内并没有保存doubled这个局部变量，这个变量被优化掉了
+    // 因为在原代码中doubled在执行完yield return后就没有意义了
+    public GeneratedClass(int state) // 
+    {
+        this.state = state;
+        initialThreadId = Environment.CurrentManagedThreadId;
+    }
+    public bool MoveNext() { ... } // 状态机主体代码
+    public IEnumerator<int> GetEnumerator() { ... } // 如果有必要则创建新的状态机 
+    public void Reset() // 一般不会实现Reset方法 会抛出异常
+    {
+        throw new NotSupportedException();
+    }
+    public void Dispose() { ... } // 执行finally块
+    public int Current { get { return current; } } // 状态机当前的值
+    private void Finally1() { ... } // finally块代码（书上确实带了个1
+    IEnumerator Enumerable().GetEnumerator() // 非通用接口的显式实现 不太明白
+    { 
+        return GetEnumerator(); 
+    } 
+
+    object IEnumerator.Current { get { return current; } } 
+}
+```
 
 ```c#
 public bool MoveNext()
@@ -264,8 +347,10 @@ public bool MoveNext()
         switch (state)
         {
                 // 跳转表负责跳转到方法中的正确位置
+                // 反编译后这里有大量goto语句
         }
         // 方法代码在每个yield return都会返回
+        // switch中goto跳转到这个部分
     }
     fault // IL代码，仅在发生异常时执行
     {
@@ -958,7 +1043,7 @@ words.Select(word => new { word, length = word.Length }) // 多个范围变量�
 >
 > 不管缺少上述哪个特性，LINQ的实用性都将大打折扣。虽然我们可以用内存集合来取代表达式树，虽然不用查询表达式也能写出可读性比较强的简单查询，虽然不用扩展方法也可以使用专用的类配合相关方法，但是这些特性加在一起将别开生面。
 
-## C#4
+## C#4 互操作性提高
 
 ### 4.1 动态类型
 
@@ -1111,3 +1196,4 @@ public class SimpleEnumerable<T> : IEnumerable<T> // 这里不能使用out定义
 
 对于多个泛型参数的类型比如Func委托，那么就对参数列表中所有参数进行检查。
 
+## C#5 异步
