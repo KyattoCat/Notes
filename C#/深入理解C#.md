@@ -273,6 +273,7 @@ using(System.Collections.Generic.Stack<int>.Enumerator enumerator = stack.GetEnu
 [.NET 本质论 - 了解 C# foreach 的内部工作原理和使用 yield 的自定义迭代器](https://docs.microsoft.com/zh-cn/archive/msdn-magazine/2017/april/essential-net-understanding-csharp-foreach-internals-and-custom-iterators-with-yield)
 
 ```c#
+// 原代码
 public static IEnumerable<int> GenerateIntegers(int count)
 {
     try
@@ -294,7 +295,8 @@ public static IEnumerable<int> GenerateIntegers(int count)
 ```
 
 ```c#
-public static IEnumerable<int> GenerateIntegers(int count) // 原方法入口
+// 反编译并将变量命名改为容易阅读的版本
+public static IEnumerable<int> GenerateIntegers(int count) // 原方法入口（桩方法）
 {
     GeneratedClass ret = new GeneratedClass(-2);
     ret.count = count;
@@ -1197,3 +1199,265 @@ public class SimpleEnumerable<T> : IEnumerable<T> // 这里不能使用out定义
 对于多个泛型参数的类型比如Func委托，那么就对参数列表中所有参数进行检查。
 
 ## C#5 异步
+
+```c#
+class Program
+{
+    static readonly HttpClient httpClient = new HttpClient();
+    static void Main(string[] args)
+    {
+        DisplayWebSiteLength();
+        while (true) ;
+    }
+
+    static async void DisplayWebSiteLength()
+    {
+        Task<string> task = httpClient.GetStringAsync("https://www.baidu.com");
+        string text = await task;
+        Console.WriteLine(text.Length);
+    }
+}
+```
+
+简单说明异步代码语法。
+
+- 在需要等待的方法之前使用await修饰。
+- 若某个方法中出现await关键字，则该方法需要用async修饰。
+- await修饰的方法返回值必须为`Task`、`Task<TResult>`、`void`或自定义task类型（C#7引入）
+
+当执行到方法中的await表达式时，方法立即返回。对于上面的代码示例就是执行到await task时直接返回到主函数，当task执行完毕时再继续执行后续代码。
+
+这是当程序执行到await时，如果await修饰的代码没有执行完毕，那么编译器就会创建一个续延（continuation），当GetStringAsync这个Web操作执行完毕后，程序就会继续执行该续延。
+
+> 定义 续延本质上是回调函数（类型为Action的委托），当异步操作（任务）执行完成后被调起。在async方法中，续延负责维护方法的状态。类似于闭包维护变量的上下文，续延会记录方法的执行位置，以便之后恢复方法的执行。Task类有一个专门用于附加续延的方法：Task.ContinueWith。上述过程是由编译器创建的一个复杂的状态机完成的。第6章会探讨该状态机的实现细节，现在重点介绍async/await所提供的功能。首先探讨对于异步编程，开发人员想要的功能和语言实际所能提供的功能。
+
+await在C#中就是为了请求编译器为我们创建续延。
+
+再定义一个东西：异步操作，我的理解异步操作就是使用await关键字调用的方法。
+
+基于任务的异步模式中，延续并没有传递给异步操作，而是异步操作发起并返回了一个Token，这个Token可供续延使用。这个Token代表正在执行的操作，该操作可能在返回调用方之前就已经执行完毕了，也可能还在执行。该Token用于表达：在该操作完成前不能开始后续的处理操作。
+
+> C# 5的异步方法典型的执行流程如下： 
+>
+> (1) 执行某些操作； 
+>
+> (2) 启动一个异步操作，并记录其返回的令牌； 
+>
+> (3) 执行某些其他操作（通常在异步操作完成前不能进行后续操作，对应这一步应该为空）； 
+>
+> (4) （利用令牌）等待异步操作完成； 
+>
+> (5) 执行其他操作； 
+>
+> (6) 完成执行。 
+
+-----
+
+> [深入.NET之异步原理](https://www.cnblogs.com/whisperedwords/articles/15432285.html)
+>
+> ```c#
+> internal sealed class Type1 { }
+> internal sealed class Type2 { }
+> private static async Task<type1> Method1Async() 
+> {
+>     /* Does some async thing that returns a Type1 object */ 
+> }
+> private static async Task<type2> Method2Async() 
+> { 
+>     /* Does some async thing that returns a Type2 object */ 
+> }
+> 
+> private static async Task<string> MyMethodAsync(Int32 argument) 
+> {
+>     Int32 local = argument;
+>     try
+>     {
+>         Type1 result1 = await Method1Async();
+>         for (Int32 x = 0; x < 3; x++) 
+>         {
+>             Type2 result2 = await Method2Async();
+>         }
+>     }
+>     catch (Exception) 
+>     {
+>         Console.WriteLine("Catch");
+>     }
+>     finally 
+>     {
+>         Console.WriteLine("Finally");
+>     }
+>     return "Done";
+> }
+> ```
+>
+> ```c#
+> // AsyncStateMachine attribute indicates an async method (good for tools using reflection); 
+> // the type indicates which structure implements the state machine
+> [DebuggerStepThrough, AsyncStateMachine(typeof(StateMachine))]
+> private static Task<string> MyMethodAsync(Int32 argument) 
+> {
+>     // Create state machine instance & initialize it
+>     StateMachine stateMachine = new StateMachine() 
+>     {
+>         // Create builder returning Task<string> from this stub method
+>         // State machine accesses builder to set Task completion/exception
+>         m_builder = AsyncTaskMethodBuilder<string>.Create(), 
+>         m_state = -1, // Initialize state machine location
+>         m_argument = argument // Copy arguments to state machine fields
+>     };
+>     // Start executing the state machine
+>     stateMachine.m_builder.Start(ref stateMachine);
+>     return stateMachine.m_builder.Task; // Return state machine's Task
+> }
+> 
+> // This is the state machine structure
+> [CompilerGenerated, StructLayout(LayoutKind.Auto)]
+> private struct StateMachine : IAsyncStateMachine
+> {
+>     // Fields for state machine's builder (Task) & its location
+>     public AsyncTaskMethodBuilder<string> m_builder;
+>     public Int32 m_state;
+>     // Argument and local variables are fields now:
+>     public Int32 m_argument, m_local, m_x;
+>     public Type1 m_resultType1;
+>     public Type2 m_resultType2;
+>     // There is 1 field per awaiter type.
+>     // Only 1 of these fields is important at any time. That field refers 
+>     // to the most recently executed await that is completing asynchronously:
+>     private TaskAwaiter<type1> m_awaiterType1;
+>     private TaskAwaiter<type2> m_awaiterType2;
+>     // This is the state machine method itself
+>     void IAsyncStateMachine.MoveNext()
+>     {
+>         // 用于保存结果值
+>         String result = null;
+>         // 编译器生成的try-catch语句块,用于确保状态能够执行完成且捕捉到await的task抛出的异常 
+>         try
+>         {
+>             // 假设我们每次进入该方法时都是在finally块中,如果根据状态判断出当前不在finally块中,则会将该值设为false.
+>             Boolean executeFinally = true; 
+>             if (m_state == -1)
+>             {
+>                 //m_state== -1表示我们是初次进入该方法,将参数值赋值给m_local
+>                 m_local = m_argument; 
+>             }
+>             // 这个try-catch块是我们代码中的块
+>             try
+>             {
+>                 //声明两个 TaskAwaiter<>变量
+>                 TaskAwaiter<type1> awaiterType1;
+>                 TaskAwaiter<type2> awaiterType2;
+>                 //通过m_state表示的状态值来切换不同的操作
+>                 switch (m_state)
+>                 {
+>                     case -1: 
+>                         //调用异步方法,获取异步方法返回的Task<type1>对象,获取该对象的TaskAwaiter.
+>                         awaiterType1 = Method1Async().GetAwaiter();
+>                         
+>                         //通过awaiter判断等待的task是否执行结束,如果没有执行结束,则执行if块内的操作.
+> 						//注意,这里存在一个竞争问题,如果我们判断的时候task没有完成,
+> 						//但是当我们进入if块内的时候,task完成了怎么办?这个问题涉及到task的内部操作,将会在下节讲解
+>                         if (!awaiterType1.IsCompleted)
+>                         {
+>                             // '修改状态为0,表示等待的task正在执行中
+>                             m_state = 0;
+>                             // 将awaiterType1的引用赋值给m_awaiterType1,保存该引用,
+>                             //因为一旦离开该方法,awaiterType1就销毁了
+>                             m_awaiterType1 = awaiterType1; 
+> 
+>                             //通过m_builder给状态机设置一个延续.其实就是给等待的task设置一个回调,回调就是MoveNext方法                      
+>                             m_builder.AwaitUnsafeOnCompleted(ref awaiterType1, ref this);
+>                 
+>                             //将executeFinall设置为false,表示我们没有进入finally块
+>                             executeFinally = false; // We're not logically leaving the 'try' 
+>                             //直接返回
+>                             return; 
+>                         }
+>                         //能执行到此处,表示我们判断task是否完成的时候,task已经完成了,那么我们也就不需要设置延续了,直接跳出switch获取结果
+>                         break;
+>                     //当再次进入该方法的时候,m_state=0,此时是我们等待的task的调用该方法,同时页表示task已经执行结束,可以获取结果了,那我们将task的TaskAwaiter的引用赋值给局部变量
+>                     case 0:
+>                         awaiterType1 = m_awaiterType1;
+>                         break;
+>                     //这个状态表示的是我们await的Method2Async的task执行结束,Method2Async的task会调用MoveNext,
+>                     //它进入该方法时看到的状态就是1.
+>                     case 1:
+>                         //将TaskAwaiter<type2>的引用赋值给局部变量
+>                         awaiterType2 = m_awaiterType2;
+>                         //跳到 ForLoopEpilog,执行for循环的第三部分
+>                         goto ForLoopEpilog;
+>                 }
+>                 // 当我们等待的第一个task执行结束后,跳出switch,通过GetResult获取结果值,注意可
+>                 //能会抛出异常,这个时候就是编译器生成的try语句器作用的时候
+>                 m_resultType1 = awaiterType1.GetResult(); 
+> 
+>             //编译器通过标签+goto的方式来模拟for的执行流程
+> 
+>             //这个是for循环的初始语句,它将m_x初始化为0,然后跳转到ForLoopBody,这个是for语句的执行主体
+>             ForLoopPrologue:
+>                 m_x = 0;
+>                 goto ForLoopBody;
+>             
+>             //这个是for语句的结尾语句,它将m_x++,并且获取await的task的结果值
+>             ForLoopEpilog:
+>                 m_resultType2 = awaiterType2.GetResult();
+>                 m_x++; 
+> 
+>             //这是for语句的执行主体
+>             ForLoopBody:
+>                 //首先我们判断m_x是否小于3,这也是for循环的条件,如果不满足条件,则表示
+>                 //循环执行结束
+>                 if (m_x < 3)
+>                 {
+>                     //通过获取Method2Async的TaskAwaiter<type2>
+>                     awaiterType2 = Method2Async().GetAwaiter();
+>                     //一样,判断是否完成
+>                     if (!awaiterType2.IsCompleted)
+>                     {
+>                         //task没有完成,我们将状态设置为1,表示await的状态处于正执行的状态
+>                         m_state = 1; 
+>                         //保存引用
+>                         m_awaiterType2 = awaiterType2;
+>                         //设置延续
+>                         m_builder.AwaitUnsafeOnCompleted(ref awaiterType2, ref this);
+>                         //此时我们不在finally,将executeFinally设置为false
+>                         executeFinally = false; 
+>                         //返回
+>                         return;
+>                     }
+>                     //如果已经完成了,则直接跳到ForLoopEpilog获取结果值
+>                     goto ForLoopEpilog;
+>                 }
+>             }
+>             catch (Exception)
+>             {
+>                 //这是我们代码中的catch块,如果执行过程中出现异常,那么将会打印Catch.
+>                 //在获取task的结果时抛出的异常也会被该catch捕捉,但是不建议这么做,因为可能会漏掉一写异常信息
+>                 Console.WriteLine("Catch");
+>             }
+>             finally
+>             {
+>                 //最终进入finally块,如果
+>                 if (executeFinally)
+>                 {
+>                     Console.WriteLine("Finally");
+>                 }
+>             }
+>             //设置result为Done
+>             result = "Done"; // What we ultimately want to return from the async function
+>         }
+>         catch (Exception exception)
+>         {
+>             //如果我们代码里没有try-catch,那么就由编译器生成的try-catch捕捉异常,则捕捉到异常之后,
+>             //他会将异常设置给m_builder的Task,同时也标志该状态机的task执行结束了,可以执行接下来的步骤了
+>             m_builder.SetException(exception);
+>             return;
+>         }
+>         //没有发生异常,那么我们设置结果值,并且设置状态机的task为完成状态
+>         m_builder.SetResult(result);
+>     }
+> }
+> ```
+
+----
+
