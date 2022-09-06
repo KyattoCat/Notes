@@ -128,7 +128,7 @@ t_0&=\frac{x_0 - O_x}{D_x}\\
 $$
 命中和没命中的情况如下图所示：
 
-![image-20220905172516390](E:\Notes\游戏开发相关\Ray Tracing in One Weekend.assets\image-20220905172516390.png)
+![image-20220905172516390](E:\Notes\游戏开发相关\images\Ray Tracing in One Weekend\image-20220905172516390.png)
 
 深蓝色的部分是射线和x轴两条线之间相交的部分A，蓝色则是射线于y轴两条线之间相交的部分B
 
