@@ -34,9 +34,16 @@
 - 点乘：$\cdot$
 - 叉乘：$\times$
 - 除：$\div$
+- 大于等于、小于等于：$\geq \leq$
 - 绝对值：$\lvert{a}\rvert$
 - 向量长度（俩竖）：$\|\vec{a}\|$
+- 因为所以：$\because x = 1 \therefore 1 = x$
+- 属于：$\in \notin$
+- 子集：$\subset \subseteq$
+- 并交集：$\bigcup \bigcap$
 
 未完待续，遇到没有的再加。
 
 [教程链接](https://www.bilibili.com/video/BV1no4y1U7At)
+
+[别人整理的](https://blog.csdn.net/Katherine_hsr/article/details/79179622)

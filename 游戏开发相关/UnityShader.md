@@ -42,7 +42,7 @@
 
 试一下mermaid画流程图：
 
-````mermaid
+```mermaid
 graph LR;
 顶点数据-->顶点着色器;
 subgraph 几何阶段;
@@ -51,9 +51,9 @@ subgraph 几何阶段;
 几何着色器-->裁剪;
 裁剪-->屏幕映射;
 end
-````
+```
 
-````mermaid
+```mermaid
 graph LR
 屏幕映射-->三角形设置;
 subgraph 光栅化阶段
@@ -62,7 +62,7 @@ subgraph 光栅化阶段
 片元着色器-->逐片元操作;
 end
 逐片元操作-->屏幕图像
-````
+```
 
 书上的截图：
 
@@ -141,21 +141,21 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 ### 1.3 坐标空间
 
 - 模型空间
-
+  
   以该模型自身中心为原点的坐标系，比如一个prefab点进去，显示的坐标系就是模型空间。
-
+  
   ![1](images/UnityShader/1.png)
 
 - 世界空间
-
+  
   绝对坐标系。
 
 - 观察空间
-
+  
   其实就是摄像机空间，以摄像机作为原点，但是是右手坐标系，z轴正方向指向屏幕外。
 
 - 裁剪空间
-
+  
   摄像机有两种投影方式，透视和正交，其视锥体不同。通过投影矩阵可以将观察空间内的点转换到方块形状的裁剪空间。
 
 - 屏幕空间
@@ -169,9 +169,6 @@ NDC坐标仍然是三维的坐标，屏幕映射的作用就是将图元的xy分
 #### 1.4.1 什么是网格（Mesh）
 
 > 三角网格是多边形网格的一种，多边形网格又被称为“Mesh”，是计算机图形学中用于为各种不规则物体建立模型的一种数据结构。现实世界中的物体表面直观上看都是由曲面构成的；而在计算机世界中，由于只能用离散的结构去模拟现实中连续的事物。所以现实世界中的曲面实际上在计算机里是由无数个小的多边形面片去组成的。比如下图的这些模型，在计算机渲染后由肉眼看是十分平滑的曲面，而实际上，计算机内部使用了大量的小三角形片去组成了这样的形状。这样的小面片的集合就被称作Mesh。Mesh既可以由三角形组成，也可以由其他平面形状如四边形，五边形等组成；由于平面多边形实际上也能再细分成三角形。所以，使用全由三角形组成的三角网格（Triangle Mesh）来表示物体表面也是具有一般性的。
-
-
-
 
 ## 2. UnityShader 基础使用
 
@@ -309,10 +306,10 @@ Properties
 
 同时，我们需要在CG代码块中添加与其相匹配的变量（同名且同类型），匹配关系见该节[附表](#ShaderLab中属性的类型和CG中变量之间的匹配关系)
 
-````c
+```c
 // 在Properties中声明的属性也需要在CG代码块中定义一个名称和类型都相同的变量
 fixed4 _Color;
-````
+```
 
 为了显示效果，修改片元着色器代码：
 
@@ -359,56 +356,56 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 <span id="常见矩阵及其用法">常见矩阵及其用法如下表（可能会被`UnityShader`自动升级为其他的函数实现）：</span>
 
-|        变量名        | 描述                                                         |
-| :------------------: | :----------------------------------------------------------- |
-|  `UNITY_MATRIX_MVP`  | 当前的模型·观察·投影矩阵，用于将顶点/矢量从模型空间变换到裁剪空间 |
-|  `UNITY_MATRIX_MV`   | 当前的模型·观察矩阵，用于将顶点/矢量从模型空间变换到观察空间 |
-|   `UNITY_MATRIX_V`   | 当前的观察矩阵，用于将顶点/矢量从世界空间变换到观察空间      |
-|   `UNITY_MATRIX_P`   | 当前的投影矩阵，用于将顶点/矢量从观察空间变换到裁剪空间      |
-|  `UNITY_MATRIX_VP`   | 当前的观察·投影矩阵，用于将顶点/矢量从世界空间变换到裁剪空间 |
-| `UNITY_MATRIX_T_MV`  | `UNITY_MATRIX_MV`的转置矩阵                                  |
+| 变量名                  | 描述                                        |
+|:--------------------:|:----------------------------------------- |
+| `UNITY_MATRIX_MVP`   | 当前的模型·观察·投影矩阵，用于将顶点/矢量从模型空间变换到裁剪空间        |
+| `UNITY_MATRIX_MV`    | 当前的模型·观察矩阵，用于将顶点/矢量从模型空间变换到观察空间           |
+| `UNITY_MATRIX_V`     | 当前的观察矩阵，用于将顶点/矢量从世界空间变换到观察空间              |
+| `UNITY_MATRIX_P`     | 当前的投影矩阵，用于将顶点/矢量从观察空间变换到裁剪空间              |
+| `UNITY_MATRIX_VP`    | 当前的观察·投影矩阵，用于将顶点/矢量从世界空间变换到裁剪空间           |
+| `UNITY_MATRIX_T_MV`  | `UNITY_MATRIX_MV`的转置矩阵                    |
 | `UNITY_MATRIX_IT_MV` | `UNITY_MATRIX_MV`的逆转置矩阵，用于将法线从模型空间变换到观察空间 |
-|   `_Object2World`    | 当前的模型矩阵，用于将顶点/矢量从模型空间变换到世界空间      |
-|   `_World2Object`    | `_Object2World`的逆矩阵，用于将顶点/矢量从世界空间变换到模型空间 |
+| `_Object2World`      | 当前的模型矩阵，用于将顶点/矢量从模型空间变换到世界空间              |
+| `_World2Object`      | `_Object2World`的逆矩阵，用于将顶点/矢量从世界空间变换到模型空间  |
 
 <span id="ShaderLab中属性的类型和CG中变量之间的匹配关系">ShaderLab中属性的类型和CG中变量之间的匹配关系：</span>
 
-| ShaderLab属性类型 | CG变量类型            |
-| ----------------- | --------------------- |
-| Color, Vector     | float4, half4, fixed4 |
-| Range, Float      | float, half, fixed    |
-| 2D                | sampler2D             |
-| Cube              | samplerCube           |
-| 3D                | sampler3D             |
+| ShaderLab属性类型 | CG变量类型                |
+| ------------- | --------------------- |
+| Color, Vector | float4, half4, fixed4 |
+| Range, Float  | float, half, fixed    |
+| 2D            | sampler2D             |
+| Cube          | samplerCube           |
+| 3D            | sampler3D             |
 
 <span id="UnityCG.cginc中常用的结构体">UnityCG.cginc中常用的结构体：</span>
 
-| 名称           | 描述           | 包含的变量                                       |
-| -------------- | -------------- | ------------------------------------------------ |
-| `appdata_base` | 顶点着色器输入 | 顶点位置，顶点法线，第一组纹理坐标               |
-| `appdata_tan`  | 顶点着色器输入 | 顶点位置，顶点切线，顶点法线，第一组纹理坐标     |
+| 名称             | 描述      | 包含的变量                    |
+| -------------- | ------- | ------------------------ |
+| `appdata_base` | 顶点着色器输入 | 顶点位置，顶点法线，第一组纹理坐标        |
+| `appdata_tan`  | 顶点着色器输入 | 顶点位置，顶点切线，顶点法线，第一组纹理坐标   |
 | `appdata_full` | 顶点着色器输入 | 顶点位置，顶点切线，顶点法线，四组或更多纹理坐标 |
-| `appdata_img`  | 顶点着色器输入 | 顶点位置，第一组纹理坐标                         |
-| `v2f_img`      | 顶点着色器输出 | 裁剪空间中的位置，纹理坐标                       |
+| `appdata_img`  | 顶点着色器输入 | 顶点位置，第一组纹理坐标             |
+| `v2f_img`      | 顶点着色器输出 | 裁剪空间中的位置，纹理坐标            |
 
 应用阶段传递给顶点着色器时Unity支持的常用语义：
 
-| 语义        | 描述                                                         |
-| ----------- | ------------------------------------------------------------ |
-| `POSITION`  | 模型空间中的顶点位置，通常是float4类型                       |
-| `NORMAL`    | 顶点法线，通常是float3类型                                   |
-| `TANGENT`   | 顶点切线，通常是float4类型                                   |
+| 语义          | 描述                                         |
+| ----------- | ------------------------------------------ |
+| `POSITION`  | 模型空间中的顶点位置，通常是float4类型                     |
+| `NORMAL`    | 顶点法线，通常是float3类型                           |
+| `TANGENT`   | 顶点切线，通常是float4类型                           |
 | `TEXCOORDn` | TEXCOORD0表示第一组纹理坐标，以此类推，通常是float2或float4类型 |
-| `COLOR`     | 顶点颜色，通常是fixed4或float4类型                           |
+| `COLOR`     | 顶点颜色，通常是fixed4或float4类型                    |
 
 从顶点着色器传递到片元着色器时Unity支持的常用语义：
 
-| 语义          | 描述                                                         |
-| ------------- | ------------------------------------------------------------ |
+| 语义            | 描述                                                        |
+| ------------- | --------------------------------------------------------- |
 | `SV_POSITION` | 裁剪空间中的顶点坐标，结构体中必须包含一个使用该语义修饰的变量。等同于Dx9中的POSITION，但最好还是用这个 |
-| `COLOR0`      | 通常用于输出第一组顶点颜色                                   |
-| `COLOR1`      | 通常用于输出第二组顶点颜色                                   |
-| `TEXCOORDn`   | 通常用于输出纹理坐标                                         |
+| `COLOR0`      | 通常用于输出第一组顶点颜色                                             |
+| `COLOR1`      | 通常用于输出第二组顶点颜色                                             |
+| `TEXCOORDn`   | 通常用于输出纹理坐标                                                |
 
 片元着色器输出时Unity支持的常用语义：
 
@@ -435,18 +432,18 @@ SV语义在渲染流水线中是有特殊含义的，被这些语义修饰的变
 
 <span id="UnityGC.cginc中常用函数">UnityGC.cginc中常用函数：</span>
 
-| 函数名                                         | 描述                                                         |
-| ---------------------------------------------- | ------------------------------------------------------------ |
-| `float3 WorldSpaceViewDir(float4 v)`           | 输入一个模型空间中的顶点位置，返回世界空间中从该点到摄像机的观察方向 |
-| `float3 UnityWorldSpaceViewDir(float4 v)`      | 输入一个世界空间中的顶点位置，返回世界空间中从该点到摄像机的观察方向 |
-| `float3 ObjSpaceViewDir(float4 v)`             | 输入一个模型空间中的顶点位置，返回模型空间中从该点到摄像机的观察方向 |
-| `float3 WorldSpaceLightDir(float4 v)`          | **仅用于前向渲染**。输入一个模型空间中的顶点位置，返回世界空间中从该点到光源的观察方向，没有被归一化 |
-| `float3 UnityWorldSpaceLightDir(float4 v)`     | **仅用于前向渲染**。输入一个世界空间中的顶点位置，返回世界空间中从该点到光源的观察方向，没有被归一化 |
-| `float3 ObjSpaceLightDir(float4 v)`            | **仅用于前向渲染**。输入一个模型空间中的顶点位置，返回模型空间中从该点到光源的观察方向，没有被归一化 |
+| 函数名                                            | 描述                                                                                                                |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `float3 WorldSpaceViewDir(float4 v)`           | 输入一个模型空间中的顶点位置，返回世界空间中从该点到摄像机的观察方向                                                                                |
+| `float3 UnityWorldSpaceViewDir(float4 v)`      | 输入一个世界空间中的顶点位置，返回世界空间中从该点到摄像机的观察方向                                                                                |
+| `float3 ObjSpaceViewDir(float4 v)`             | 输入一个模型空间中的顶点位置，返回模型空间中从该点到摄像机的观察方向                                                                                |
+| `float3 WorldSpaceLightDir(float4 v)`          | **仅用于前向渲染**。输入一个模型空间中的顶点位置，返回世界空间中从该点到光源的观察方向，没有被归一化                                                              |
+| `float3 UnityWorldSpaceLightDir(float4 v)`     | **仅用于前向渲染**。输入一个世界空间中的顶点位置，返回世界空间中从该点到光源的观察方向，没有被归一化                                                              |
+| `float3 ObjSpaceLightDir(float4 v)`            | **仅用于前向渲染**。输入一个模型空间中的顶点位置，返回模型空间中从该点到光源的观察方向，没有被归一化                                                              |
 | `float3 Shader4PointLights(...)`               | **仅用于前向渲染**。计算四个点光源的光照，她的参数是已经打包进矢量的光照数据，通常如`unity_4LightPosX0`等，见高级光照[附表](#前向渲染可以使用的内置光照变量)。前向渲染通常会使用这个函数计算逐顶点光照 |
-| `float3 UnityObjectToWorldNormal(float3 norm)` | 把法线方向从模型空间转换到世界空间中                         |
-| `float3 UnityObjectToWorldDir(in float3 dir)`  | 把方向矢量从模型空间转换到世界空间中                         |
-| `float3 UnityWorldToObjectDir(float3 dir)`     | 把方向矢量从世界空间转换到模型空间中                         |
+| `float3 UnityObjectToWorldNormal(float3 norm)` | 把法线方向从模型空间转换到世界空间中                                                                                                |
+| `float3 UnityObjectToWorldDir(in float3 dir)`  | 把方向矢量从模型空间转换到世界空间中                                                                                                |
+| `float3 UnityWorldToObjectDir(float3 dir)`     | 把方向矢量从世界空间转换到模型空间中                                                                                                |
 
 ## 4. 基础纹理
 
@@ -499,35 +496,35 @@ float4 _MainTex_ST;
 显而易见的，直接贴在模型表面是一种用途，这里主要介绍别的
 
 - 凹凸映射
-
+  
   凹凸映射的目的是使用一张纹理来修改模型表面的法线，以为模型提供更多的细节，这种方法可以让模型**看起来**凹凸不平。
-
+  
   有两种方式可以用来进行凹凸映射：
-
+  
   1. 高度映射。使用一张高度纹理来模拟表面位移，获得修改后的法线值。
   2. 法线映射。使用一张法线纹理直接存储表面法线。法线方向分量范围[-1, 1]，通常会将法线方向映射到像素分量[0, 1]上，才能将法线信息存储在纹理上。
-
+  
   方向是相对于坐标空间来说的，因此法线方向也有不同坐标空间下的纹理。
-
+  
   一种是模型空间的法线纹理，一种是切线空间的法线纹理。通常使用切线空间的法线纹理。
-
+  
   切线空间的法线纹理具有一些模型空间的法线纹理没有的优点：
-
+  
   1. 自由度高。模型空间下记录的是绝对法线信息，仅用于创建她时的那个模型，不能用于其他模型。
   2. 可以进行UV动画。原因同上，切线空间下允许凹凸移动的效果。
   3. 可重用。一个砖块六个面仅需要一张切线空间下纹理即可。
   4. 可压缩。切线空间下法线纹理法线方向的Z方向总是正方向，因此可以仅存储XY分量，通过XY分量计算Z分量，所以可以压缩。
 
 - 渐变纹理
-
+  
   嗯哼，可以自由控制模型的漫反射光照。
 
 - 遮罩纹理
-
+  
   遮罩纹理可以让我们保护某些区域免于某些修改。
-
+  
   采样获得遮罩纹理的纹素值，然后使用其中某个（或某几个）通道的值来与某种表面属性相乘，这样当该通道的值为0时，可以保护表面不受该属性的影响。
-
+  
   比如说，有一个红砖块的纹理，我希望让砖块之间的沟槽不反射高光，我就可以使用砖块纹理的灰度图（因为正好沟槽部分在灰度图里比较黑）当作遮罩，从而避免沟槽的部分受到高光反射的影响。
 
 ### 4.A 一些疑问
@@ -538,23 +535,23 @@ float4 _MainTex_ST;
 > 链接：https://www.zhihu.com/question/376921536/answer/1063272336
 > 来源：知乎
 > 著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
->
+> 
 > 这个问题其实与GPU的寻址方式（地址对齐要求）有关，并非是图形API层面的限制。
->
+> 
 > GPU作为一种专用的绘图硬件（当然现在也在逐渐泛用化），其高速运作的能力来自于对于特殊目的定制的特殊硬件模块。其中，实现贴图参照的模块就是这么一种特殊的硬件模块。
->
+> 
 > 在CPU当中，当要参照一张贴图的时候，你需要在程序当中给出计算地址的公式。比如，当你要访问一张宽度为w高度为h的以行优先顺序存储的贴图当中的坐标为（x，y）的贴图的时候，就需要用y*w+x来计算这个地址。这个计算公式是以代码的形式给出的，对于CPU来说，它只是将这张贴图作为一个连续的内存空间处理而已。
->
+> 
 > 但是GPU不同。GPU当中完成对贴图访问（寻址以及获取数据）的模块是以硬件形式存在的。它是不可编程的，你只能从它所提供的几种方式当中选一种。这是第一个因素。
->
+> 
 > 其次，GPU当中进行的是大量的并行计算。这就意味着GPU经常会需要对贴图的不同位置进行同时参照。而且，这种参照往往是需要截取贴图当中一小块面积的内容，也就是是一种2D甚至是3D形状的参照，按CPU那种1D线性的方式保存贴图的话，会使得要参照的那一小部分地址不连续，从而影响高速缓存的命中率，降低速度。
->
+> 
 > 所以，贴图在GPU的内存（显存）当中，一般都不是以行优先或者列优先方式存储的，而是以“块”为单位存储的。就好像一块一块马赛克组成的墙面那样，每个马赛克对应的像素在内存上是连续存储的。这是第二个因素。
->
+> 
 > 此外，为了尽可能节约内存开销和传输带宽，贴图一般都会以一种合适的压缩格式存储。而常用的压缩格式，如BC或者DXT，都是将贴图分块进行压缩。这同样隐含了贴图必须是这些“块”的整数倍这样一个条件。这是第三个因素。
->
+> 
 > 上述几个因素（硬件寻址+贴图在内存上的特殊排布方式+压缩算法要求）决定了一款GPU在设计的时候就会将这个“块”的最小尺寸固定下来。有的GPU是2x2像素，有的是4x4像素，还有的是8x8像素。所以当贴图的尺寸不是这些“块”的整数倍的时候，当贴图被传送到GPU内存（显存）的时候，就会被拉伸或者在四周（一般是右侧和下侧）填充无用数据，使其成为这些“块”的整数倍。（称为pitch）
->
+> 
 > 这个情况是GPU硬件的要求，与使用何种图形API无关。但是诸如OpenGL这种抽象等级较高的图形API在易用性和可控性之间选择了易用性，也就是尽力隐藏这些细节，在其内部为你完成必要的拉伸或者pitch的操作，从而使得你觉得好像它支持非二次幂的纹理。
 
 ## 5. 高级光照
@@ -763,7 +760,7 @@ Shader "Custom/ForwardRendering"
 
 
             CGPROGRAM
-            
+
             #pragma multi_compile_fwdbase
 
             #pragma vertex vert
@@ -911,7 +908,6 @@ Shader "Custom/ForwardRendering"
     }
     Fallback "Specular"
 }
-
 ```
 
 每一步执行的效果可以通过帧调试器查看，帧调试器打开位置如下图所示：
@@ -1020,7 +1016,7 @@ v2f vert(a2v v)
 {
     v2f o;
     // ......
-    
+
     TRANSFER_SHADOW(o);
     return o;
 }
@@ -1032,11 +1028,11 @@ v2f vert(a2v v)
 fixed4 frag(v2f i)
 {
     // ......
-    
+
     fixed shadow = SHADOW_ATTENUATION(i);
-    
+
     // ......
-    
+
     return fixed4(ambient + (diffuse + specular) * atten * shadow, 1.0);
 }
 ```
@@ -1051,9 +1047,9 @@ fixed4 frag(v2f i)
 fixed4 frag(v2f i)
 {
     // ......
-    
+
     UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
-    
+
     return fixed4(ambient + (diffuse + specular) * atten, 1.0);
 }
 ```
@@ -1073,9 +1069,9 @@ Unity中通常使用两种方法实现透明效果：透明度测试和透明度
 - 透明度测试很暴力，如果一个物体是透明的，那么她就完全不可见，否则完全可见，不需要关闭深度写入。这种方式无法得出半透明效果。
 
 - 透明度混合能得到真正的半透明效果，她会使用当前片元的透明度作为混合因子，与存在颜色缓冲区中的颜色值进行混合从而得到新的颜色，但是需要关闭深度写入。
-
+  
   需要注意的是，我们只关闭了深度写入，但是深度测试没有被关闭。当使用透明度混合渲染一个片元时，还是会比较她的深度值和深度缓冲区中的深度值，如果她的深度值比缓冲区中的更远，那么就不会进行混合操作。这一点决定了，当一个不透明物体出现在透明物体前，不透明物体仍然可以正常遮挡住透明物体。
-
+  
   如果不关闭深度写入，那么，如果一个透明物体在不透明物体前面，本来可以透过透明物体看到不透明物体，但由于深度缓冲中的值被透明物体覆盖，导致颜色缓冲也被更新。也就是看不到后面的物体了。
 
 但是，关闭深度写入破坏了深度缓冲的工作机制，这是一个***非常糟糕***的事情，虽然我们不得不这么做。关闭深度写入导致渲染顺序变得非常重要。
@@ -1106,52 +1102,52 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
 
 <span id="LightMode标签支持的渲染路径设置选项">LightMode标签支持的渲染路径设置选项：</span>
 
-| 标签名                               | 描述                                                         |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `Always`                             | 不管使用哪种渲染路径，该Pass总是会被渲染，但不会计算任何光照 |
-| `ForwardBase`                        | 用于**前向渲染**。该Pass会计算环境光，最重要的平行光，逐顶点/SH光源和Lightmaps |
-| `ForwardAdd`                         | 用于**前向渲染**。计算额外的逐像素光源，每个Pass对应一个光源 |
-| `Deferred`                           | 用于**延迟渲染**。该Pass会渲染G缓冲                          |
-| `ShadowCaster`                       | 把物体的深度信息渲染到阴影映射纹理（shadowmap）或一张深度纹理中 |
-| `PrepassBase`                        | 用于**遗留的延迟渲染**。渲染法线和高光反射的指数部分？       |
-| `PrepassFinal`                       | 用于**遗留的延迟渲染**。该Pass通过合并纹理了、光照和自发光来渲染得到最后的颜色 |
+| 标签名                                | 描述                                                |
+| ---------------------------------- | ------------------------------------------------- |
+| `Always`                           | 不管使用哪种渲染路径，该Pass总是会被渲染，但不会计算任何光照                  |
+| `ForwardBase`                      | 用于**前向渲染**。该Pass会计算环境光，最重要的平行光，逐顶点/SH光源和Lightmaps |
+| `ForwardAdd`                       | 用于**前向渲染**。计算额外的逐像素光源，每个Pass对应一个光源                |
+| `Deferred`                         | 用于**延迟渲染**。该Pass会渲染G缓冲                            |
+| `ShadowCaster`                     | 把物体的深度信息渲染到阴影映射纹理（shadowmap）或一张深度纹理中              |
+| `PrepassBase`                      | 用于**遗留的延迟渲染**。渲染法线和高光反射的指数部分？                     |
+| `PrepassFinal`                     | 用于**遗留的延迟渲染**。该Pass通过合并纹理了、光照和自发光来渲染得到最后的颜色       |
 | `Vertex`、`VertexLMRGBM`和`VertexLM` | 用于**遗留的顶点照明渲染**                                   |
 
 <span id="前向渲染可以使用的内置光照变量">前向渲染可以使用的内置光照变量：</span>
 
-| 名称                                                      | 类型     | 描述                                                         |
-| --------------------------------------------------------- | -------- | ------------------------------------------------------------ |
+| 名称                                                        | 类型       | 描述                                                |
+| --------------------------------------------------------- | -------- | ------------------------------------------------- |
 | `_LightColor0`                                            | float4   | 该Pass处理的**逐像素光源**颜色                               |
 | `_WorldSpaceLightPos0`                                    | float4   | xyz分量为该Pass处理的**逐像素光源**的世界位置，w分量为0时为平行光，为1时为其他光源。 |
-| `_LightMatrix0`                                           | float4x4 | 从世界空间到光源空间的变换矩阵。可以用于采样cookie和光强衰减纹理 |
-| `unity_4LightPosX0, unity_4LightPosY0, unity_4LightPosZ0` | float4   | **仅用于Base Pass**。前四个非重要的点光源在世界空间中的位置  |
-| `unity_4LightAtten0`                                      | float4   | **仅用于Base Pass**。前四个非重要的点光源的衰减因子          |
-| `unity_LightColor`                                        | half4[4] | **仅用于Base Pass**。前四个非重要的点光源的颜色              |
+| `_LightMatrix0`                                           | float4x4 | 从世界空间到光源空间的变换矩阵。可以用于采样cookie和光强衰减纹理               |
+| `unity_4LightPosX0, unity_4LightPosY0, unity_4LightPosZ0` | float4   | **仅用于Base Pass**。前四个非重要的点光源在世界空间中的位置              |
+| `unity_4LightAtten0`                                      | float4   | **仅用于Base Pass**。前四个非重要的点光源的衰减因子                  |
+| `unity_LightColor`                                        | half4[4] | **仅用于Base Pass**。前四个非重要的点光源的颜色                    |
 
 <span id="延迟渲染路径可以使用的内置变量">延迟渲染路径可以使用的内置变量：</span>
 
-| 名称            | 类型     | 描述                                                         |
-| --------------- | -------- | ------------------------------------------------------------ |
-| `_LightColor`   | float4   | 光源颜色                                                     |
+| 名称              | 类型       | 描述                                  |
+| --------------- | -------- | ----------------------------------- |
+| `_LightColor`   | float4   | 光源颜色                                |
 | `_LightMatrix0` | float4x4 | 从世界空间到光源空间的变换矩阵。可以用于采样cookie和光强衰减纹理 |
 
 <span id="预制渲染队列">预制渲染队列索引号和描述：</span>
 
-| 名称           | 索引 | 描述                                                         |
-| -------------- | ---- | ------------------------------------------------------------ |
-| `Background`   | 1000 | 此渲染队列在任何其他渲染队列之前渲染。                       |
-| `Geometry`     | 2000 | 不透明几何体使用此队列。                                     |
-| `AlphaTest`    | 2450 | 经过 Alpha 测试的几何体将使用此队列。                        |
-| `GeometryLast` |      | 视为“不透明”的最后的渲染队列。（这个是多出来的，书上没有，不知道索引多少） |
+| 名称             | 索引   | 描述                                          |
+| -------------- | ---- | ------------------------------------------- |
+| `Background`   | 1000 | 此渲染队列在任何其他渲染队列之前渲染。                         |
+| `Geometry`     | 2000 | 不透明几何体使用此队列。                                |
+| `AlphaTest`    | 2450 | 经过 Alpha 测试的几何体将使用此队列。                      |
+| `GeometryLast` |      | 视为“不透明”的最后的渲染队列。（这个是多出来的，书上没有，不知道索引多少）      |
 | `Transparent`  | 3000 | 此渲染队列在 Geometry 和 AlphaTest 之后渲染，按照从后到前的顺序。 |
-| `Overlay`      | 4000 | 此渲染队列旨在获得覆盖效果。                                 |
+| `Overlay`      | 4000 | 此渲染队列旨在获得覆盖效果。                              |
 
 ### 5.B 一些疑问
 
 光源的Cookie，搜了一下，引用官方文档：
 
 > A cookie is a mask that you place on a Light to create a shadow with a specific shape or color, which changes the appearance and intensity of the Light. Cookies are an efficient way of simulating complex lighting effects with minimal or no runtime performance impact. Effects you can simulate with cookies include caustics, soft shadows, and light shapes.
->
+> 
 > 剪影是一个蒙版，您可以将其放置在光源上，以创建具有特定形状或颜色的阴影，从而改变光源的外观和强度。Cookie 是一种模拟复杂光照效果的有效方式，对运行时性能的影响微乎其微。您可以使用剪影模拟的效果包括焦散、柔和阴影和光源形状。
 
 还没学到，之后再看
@@ -1181,28 +1177,28 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
 创建环境映射所需的立方体纹理的方法有三种：
 
 1. 直接由一些特殊布局的纹理创建。
-
+   
    我们需要提供类似立方体展开图的交叉布局、全景布局等的纹理，然后将该纹理的类型设为`Cubemap`即可，在基于物理的渲染中，我们通常会使用一张HDR图像来生成高质量的Cubemap。
 
 2. 手动创建Cubemap资源，再把6张图赋给她。这是老旧的方法，Unity建议使用第一种方法，因为第一种方法可以对纹理数据进行压缩，且可以支持边缘修正、光滑反射和HDR等功能。
 
 3. 由脚本生成。前两种方法都需要提前准备好立方体纹理的图像，但理想情况下，我们希望根据物体在场景位置的不同，生成不同的立方体纹理。于是我们可以使用Unity的脚本，利用`Camera.RenderToCubemap`方法来实现。书上的脚本实现如下：
-
+   
    ```c#
    using UnityEngine;
    using UnityEditor;
    using System.Collections;
    
    public class RenderCubemapWizard : ScriptableWizard {
-       
+   
        public Transform renderFromPosition;
        public Cubemap cubemap;
-       
+   
        void OnWizardUpdate () {
            helpString = "Select transform to render from and cubemap to render into";
            isValid = (renderFromPosition != null) && (cubemap != null);
        }
-       
+   
        void OnWizardCreate () {
            // create temporary camera for rendering
            GameObject go = new GameObject("CubemapCamera");
@@ -1211,22 +1207,22 @@ so，这里就不继续写了，因为这种阴影的效果和不透明物体的
            go.transform.position = renderFromPosition.position;
            // render into cubemap        
            go.GetComponent<Camera>().RenderToCubemap(cubemap);
-           
+   
            // destroy temporary camera
            DestroyImmediate(go);
        }
-       
+   
        [MenuItem("GameObject/Render into Cubemap")]
        static void RenderCubemap () {
            ScriptableWizard.DisplayWizard<RenderCubemapWizard>("Render cubemap", "Render!");
        }
    }
    ```
-
+   
    该脚本需要被放在`Assets/Editor`目录下，成为一个编辑器脚本，然后我们就能在GameObject选项栏里找到Render into Cubemap选项，将物体的位置和导出的纹理设置好，按下Render就可以得到立方体纹理了。如图所示：
-
+   
    ![编辑器脚本](images/UnityShader/渲染到立方体纹理脚本.png)
-
+   
    ![渲染步骤](images/UnityShader/渲染到立方体纹理步骤.png)
 
 #### 6.1.3 反射和折射
@@ -1254,7 +1250,7 @@ Shader "Custom/Reflection"
             Tags {"LightMode"="ForwardBase"}
 
             CGPROGRAM
-            
+
             #pragma multi_compile_fwdbase
 
             #pragma vertex vert
@@ -1272,7 +1268,7 @@ Shader "Custom/Reflection"
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
             };
-            
+
             struct v2f {
                 float4 pos : SV_POSITION;
                 float3 worldPos : TEXCOORD0;
@@ -1324,7 +1320,6 @@ Shader "Custom/Reflection"
     }
     FallBack "Reflective/VertexLit"
 }
-
 ```
 
 折射的原理比反射复杂一些。当光线从一种介质斜射进入另一种介质时，传播方向一般会发生改变，当给定入射角时，可以使用菲涅尔定律来计算反射角（试用一下公式的功能）：
@@ -1439,32 +1434,32 @@ Shader "Custom/Mirror"
     }
     SubShader {
         Tags { "RenderType"="Opaque" "Queue"="Geometry"}
-        
+
         Pass { 
             Tags { "LightMode"="ForwardBase" }
-        
+
             CGPROGRAM
-            
+
             #pragma multi_compile_fwdbase    
-            
+
             #pragma vertex vert
             #pragma fragment frag
-            
+
             #include "UnityCG.cginc"
-            
+
             sampler2D _MainTex;
             float4 _MainTex_ST;
-            
+
             struct a2v {
                 float4 vertex : POSITION;
                 float4 texcoord : TEXCOORD0;
             };
-            
+
             struct v2f {
                 float4 pos : SV_POSITION;
                 float4 uv : TEXCOORD0;
             };
-            
+
             v2f vert(a2v v) {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
@@ -1473,11 +1468,11 @@ Shader "Custom/Mirror"
                 o.uv.x = 1 - o.uv.x;
                 return o;
             }
-            
+
             fixed4 frag(v2f i) : SV_Target {
                 return tex2D(_MainTex, i.uv);
             }
-            
+
             ENDCG
         }
 
@@ -1540,7 +1535,7 @@ Shader "Custom/GlassRefraction"
             // 四个分量为 1/width 1/height width height
             float4 _RefractionTex_TexelSize; // 这个是必须的吗？
 
-                        
+
             struct v2f {
                 float4 pos : SV_POSITION;
                 float4 scrPos : TEXCOORD0;
@@ -1584,7 +1579,7 @@ Shader "Custom/GlassRefraction"
                 float2 offset = bump.xy * _Distortion * _RefractionTex_TexelSize.xy;
                 // 偏移
                 i.scrPos.xy = offset + i.scrPos.xy;
-                
+
                 // 折射纹理采样 xy/w是透视除法 获得真正屏幕空间的坐标
                 fixed3 refrCol = tex2D(_RefractionTex, i.scrPos.xy / i.scrPos.w).rgb;
                 // 将法线从切线空间变换到世界空间下
@@ -1697,7 +1692,7 @@ Shader "Custom/ImageSequenceAnimation"
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
             };
-            
+
             v2f vert(a2v v)
             {
                 v2f o;
@@ -1861,7 +1856,7 @@ Shader "Custom/Water"
             Cull Off
 
             CGPROGRAM
-            
+
             #pragma vertex vert
             #pragma fragment frag
 
@@ -1910,12 +1905,11 @@ Shader "Custom/Water"
             ENDCG
 
         }
-        
+
     }
 
     Fallback "Transparent/VertexLit"
 }
-
 ```
 
 注意到SubShader的Tags中除了透明物体的常规设置，还添加了一个新标签`DisableBatching`。一些SubShader在使用Unity的批处理功能时会出现问题，顶点动画就是其中一种，因为批处理会合并所有相关的模型，而这些模型本身的模型空间将会丢失，在本代码中我们需要在物体的模型空间下对顶点进行偏移，所以在这里需要取消批处理功能。
@@ -1928,11 +1922,11 @@ Shader "Custom/Water"
 
 <span id="时间变量">UnityShader时间内置变量：</span>
 
-| 名称              | 类型     | 描述                                                         |
-| ----------------- | -------- | ------------------------------------------------------------ |
-| `_Time`           | `float4` | t是自场景加载开始所经过的时间，四个分量的值分别是`(t/20, t, 2t, 3t)` |
-| `_SinTime`        | `float4` | t是自场景加载开始所经过的时间的正弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
-| `_CosTime`        | `float4` | t是自场景加载开始所经过的时间的余弦值，四个分量的值分别是`(t/8, t/4, t/2, t)` |
+| 名称                | 类型       | 描述                                                  |
+| ----------------- | -------- | --------------------------------------------------- |
+| `_Time`           | `float4` | t是自场景加载开始所经过的时间，四个分量的值分别是`(t/20, t, 2t, 3t)`        |
+| `_SinTime`        | `float4` | t是自场景加载开始所经过的时间的正弦值，四个分量的值分别是`(t/8, t/4, t/2, t)`   |
+| `_CosTime`        | `float4` | t是自场景加载开始所经过的时间的余弦值，四个分量的值分别是`(t/8, t/4, t/2, t)`   |
 | `unity_DeltaTime` | `float4` | dt是时间增量，四个分量的值分别是`(dt, 1/dt. smoothDt, 1/smoothDt)` |
 
 ## 8. 屏幕后处理
@@ -1992,7 +1986,7 @@ public class PostEffectsBase : MonoBehaviour
             NotSupported();
         }
     }
-    
+
     protected bool CheckSupport()
     {
         if (SystemInfo.supportsImageEffects == false || SystemInfo.supportsRenderTextures == false)
@@ -2002,12 +1996,12 @@ public class PostEffectsBase : MonoBehaviour
         }
         return true;
     }
-    
+
     protected void NotSupported()
     {
         enabled = false;
     }
-    
+
     // 由于每个屏幕后处理效果通常都需要指定一个Shader来创建一个用于处理渲染纹理的材质，所以基类也提供这样的方法
     protected Material CheckShaderAndCreateMaterial(Shader shader, Material material)
     {
@@ -2015,12 +2009,12 @@ public class PostEffectsBase : MonoBehaviour
         {
             return null;
         }
-        
+
         if (shader.isSupported && material && material.shader == shader)
         {
             return material;
         }
-        
+
         if (!shader.isSupported)
         {
             return null;
@@ -2029,7 +2023,7 @@ public class PostEffectsBase : MonoBehaviour
         {
             material = new Material(shader);
             material.hideFlags = HideFlags.DontSave;
-            
+
             if (material)
             {
                 return material;
@@ -2040,7 +2034,7 @@ public class PostEffectsBase : MonoBehaviour
             }
         }
     }
-    
+
     protected void Start()
     {
         CheckSupport();
@@ -2076,7 +2070,7 @@ public class MyBrightnessSaturationAndContrast : PostEffectsBase
 
     [Range(0.0f, 3.0f)]
     public float brightness = 1.0f;
-    
+
     [Range(0.0f, 3.0f)]
     public float saturation = 1.0f;
 
@@ -2125,12 +2119,12 @@ Shader "Custom/BrightnessSaturationAndContrast"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
-            
+
             sampler2D _MainTex;
             half _Brightness;
             half _Saturation;
             half _Contrast;
-            
+
             struct a2v
             {
                 float4 vertex : POSITION;
@@ -2386,7 +2380,7 @@ public class MyGaussianBlur : PostEffectsBase
                 material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
-                
+
                 Graphics.Blit(buffer, bufferTemp, material, 0);
 
                 RenderTexture.ReleaseTemporary(buffer);
@@ -2449,7 +2443,7 @@ Shader "Custom/MyGaussianBlur"
 
             return o;
         }
-        
+
         v2f vertHorizontal(appdata_img v)
         {
             v2f o;
@@ -2530,7 +2524,7 @@ public class MyBloom : PostEffectsBase
         }
     }
 
-    
+
     [Range(0, 4)]
     public int iterations = 3;
 
@@ -2563,7 +2557,7 @@ public class MyBloom : PostEffectsBase
                 material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
 
                 RenderTexture bufferTemp = RenderTexture.GetTemporary(rtW, rtH, 0);
-                
+
                 Graphics.Blit(buffer, bufferTemp, material, 1);
 
                 RenderTexture.ReleaseTemporary(buffer);
@@ -2639,7 +2633,7 @@ Shader "Custom/MyBloom"
 
             return color * val;
         }
-        
+
         struct v2fBloom
         {
             float4 pos : SV_POSITION;
@@ -2982,7 +2976,7 @@ public class Fog : PostEffectsBase
 
             material.SetMatrix("_FrustumCornersRay", frustumCorners);
             material.SetMatrix("_ViewProjectionInverseMatrix", (MyCamera.projectionMatrix * MyCamera.worldToCameraMatrix).inverse);
-            
+
             material.SetFloat("_FogDensity", fogDensity);
             material.SetColor("_FogColor", fogColor);
             material.SetFloat("_FogStart", fogStart);
@@ -3194,7 +3188,7 @@ Shader "Custom/MyEdgeDetectV2"
         float _SampleDistance;
         half4 _Sensitivity;
         sampler2D _CameraDepthNormalsTexture;
-        
+
         struct v2f
         {
             float4 pos : SV_POSITION;
@@ -3273,8 +3267,6 @@ Shader "Custom/MyEdgeDetectV2"
 ```
 
 ![效果真不错](images/UnityShader/基于深度和法线纹理的边界检测.png)
-
-
 
 ## 9. 卡通风格渲染
 
@@ -3398,7 +3390,7 @@ Shader "Custom/ToonShading"
 
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
-                
+
                 TRANSFER_SHADOW(o);
                 return o;
             }
@@ -3485,7 +3477,7 @@ Shader "Custom/Dissolve"
             float4 _BumpMap_ST;
             sampler2D _BurnMap;
             float4 _BurnMap_ST;
-            
+
             fixed _BurnAmount;
             fixed _LineWidth;
             fixed4 _BurnFirstColor;
