@@ -162,3 +162,15 @@ return true;
   若一负一正，就是t2比t3，返回true。
 
   最终结果变成只和t0t1的正负有关了，t0和t1的正负则取决于射线起点的x轴分量。
+
+## BVH
+
+BVH = Bounding Volume Hierarchy（包围盒层次结构）
+
+本质上就是将场景中的物体依据包围盒进行划分，最终结果就是一个二叉树，可以将射线检测的时间从n降到logn。
+
+然后就疑惑起来了，按照Ray Tracing in One Weekend（之后简称OW）的写法，拿到的是可命中物体的AABB来划分，可是AABB是轴对齐的，那相机的方向如果不是正好对着一个轴，那不就这样了（相机朝向绿X的方向）
+
+<img src="E:\Notes\游戏开发相关\images\Ray Tracing in One Weekend\image-20220907195533991.png" alt="image-20220907195533991" style="zoom:50%;" />
+
+按照中点划分的规则，上面这张图里两个球分成两个区域，然后相机又是斜着的，照样还是遍历所有节点。
