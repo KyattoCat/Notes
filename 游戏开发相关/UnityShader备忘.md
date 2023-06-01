@@ -2,7 +2,7 @@
 
 ### LOD
 
-![image-20220706160325936](UnityShader备忘.assets/image-20220706160325936.png)
+![image-20220706160325936](images/UnityShader备忘/image-20220706160325936.png)
 
 > Shader Level of Detail (LOD)，翻译过来是什么“着色器的细节层次效果”。听着好高端的样子，这种夸张的翻译也就只能放在那些作者自己都不知道写的是什么的软文里面。对于TA来说，Shader LOD其实就是根据设备性能的不同编译不同版本的Shader。
 > 
@@ -18,7 +18,7 @@
 
 UNITY_VERTEX_INPUT_INSTANCE_ID
 
-### HLSL中 branch flatten unroll loop关键字
+### HLSL中 branch flatten unroll loop关键字s
 
 > 查找了些资料，这些关键词是HLSL编译器为了优化代码为if和for语句添加的标签，具体含义如下：
 > 
@@ -41,3 +41,109 @@ UNITY_VERTEX_INPUT_INSTANCE_ID
 > 还有一个问题是对于一些渐进式的指令，比如tex2D在branch和loop这样标签下的语句中使用会产生错误，因为GPU是对四个像素的Chunk一起着色的，fragment需要通过像素之间的UV差距来判断要使用的mipmap，而动态分支对于不同的像素计算方式无法确定，所以是禁止使用tex2D的，但是可以tex2DGrad或者tex2DLod来指定mipmap，这样是可以使用的，不然则需要通过flatten和unroll来告诉编译器是静态分支可以使用。
 > 
 > [参考链接](https://zhuanlan.zhihu.com/p/115871017)
+
+### UnityUIShader模板 (UV偏移动画)
+
+``` c
+Shader "UI/CommonUI_UV"
+{
+    Properties
+    {
+        [PerRendererData] _MainTex ("Texture", 2D) = "white" {}
+        [HideInInspector] _StencilComp ("Stencil Comparison", Float) = 8
+		[HideInInspector] _Stencil ("Stencil ID", Float) = 0
+		[HideInInspector] _StencilOp ("Stencil Operation", Float) = 0
+		[HideInInspector] _StencilWriteMask ("Stencil Write Mask", Float) = 255
+		[HideInInspector] _StencilReadMask ("Stencil Read Mask", Float) = 255
+        [HideInInspector] _ColorMask ("Color Mask", Float) = 15
+        _Speed ("Speed", Vector) = (0, 0, 0, 0)
+    }
+    SubShader
+    {
+		Tags
+		{
+			"Queue"="Transparent"
+			"IgnoreProjector"="True"
+			"RenderType"="Transparent"
+			"PreviewType"="Plane"
+			"CanUseSpriteAtlas"="True"
+		}
+		Stencil
+		{
+			Ref [_Stencil]
+			Comp [_StencilComp]
+			Pass [_StencilOp]
+			ReadMask [_StencilReadMask]
+			WriteMask [_StencilWriteMask]
+		}
+
+        Cull Off
+		Lighting Off
+		ZWrite Off
+		ZTest [unity_GUIZTestMode]
+		Blend SrcAlpha OneMinusSrcAlpha
+		ColorMask [_ColorMask]
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ UNITY_UI_ALPHACLIP
+            #include "UnityUI.cginc"
+            #include "UnityCG.cginc"
+
+            fixed4 _TextureSampleAdd; // Unity管理：图片格式用Alpha8 
+            float4 _ClipRect;// Unity管理：2D剪裁使用
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            float4 _Speed;
+
+            struct a2v{
+			    float4 vertex       : POSITION;
+			    float4 color        : COLOR;
+			    float2 texcoord     : TEXCOORD0;
+			    UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+		    struct v2f{
+                float4 vertex       : SV_POSITION;
+                float4 color        : COLOR;
+               	float2 texcoord     : TEXCOORD0;
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+            v2f vert(a2v IN){
+                v2f OUT;
+                UNITY_SETUP_INSTANCE_ID(IN);
+			    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(OUT);// 实例化处理
+                OUT.vertex = UnityObjectToClipPos(IN.vertex);// 模型空间到裁剪空间
+                OUT.color = IN.color;
+                OUT.texcoord.xy = TRANSFORM_TEX(IN.texcoord, _MainTex) + frac(_Speed.xy * _Time.y); // 正常就直接OUT=IN的顶点
+                return OUT;
+            }
+            fixed4 frag(v2f IN):SV_Target{
+                half4 color = tex2D(_MainTex,IN.texcoord) * IN.color;
+                return color;
+		    }   
+            ENDCG
+        }
+    }
+}
+```
+
+附Shader属性标签官方解释:
+
+>| [None](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.None.html) | 未设置任何标志。                                             |
+>| ------------------------------------------------------------ | ------------------------------------------------------------ |
+>| [HideInInspector](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.HideInInspector.html) | 表示 Unity 在默认材质检视面板中隐藏属性。                    |
+>| [PerRendererData](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.PerRendererData.html) | Unity 将从渲染器的 MaterialPropertyBlock（而非材质）查询此属性的纹理值。 |
+>| [NoScaleOffset](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.NoScaleOffset.html) | 在默认材质检视面板中的纹理旁边不显示 UV 缩放/偏移字段。      |
+>| [Normal](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.Normal.html) | 表示此属性的值包含标准（标准化矢量）数据。                   |
+>| [HDR](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.HDR.html) | 表示此属性的值包含高动态范围 (HDR) 数据。                    |
+>| [Gamma](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.Gamma.html) | 表示此属性的值位于伽马空间。如果活动颜色空间为线性，Unity 将这些值转换为线性空间值。 |
+>| [NonModifiableTextureData](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.NonModifiableTextureData.html) | 不能在默认材质检视面板中编辑此纹理属性。                     |
+>| [MainTexture](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.MainTexture.html) | 表示此属性的值包含材质的主纹理。                             |
+>| [MainColor](https://docs.unity3d.com/cn/2019.4/ScriptReference/Rendering.ShaderPropertyFlags.MainColor.html) | 表示此属性的值包含材质的主色。                               |
+
+### RenderDoc
+
+调试Shader时往shader里加入#pragma enable_d3d11_debug_symbols
