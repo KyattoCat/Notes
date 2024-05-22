@@ -147,3 +147,9 @@ Shader "UI/CommonUI_UV"
 ### RenderDoc
 
 调试Shader时往shader里加入#pragma enable_d3d11_debug_symbols
+
+### 常用API
+
+k = step(x, y) // if (x <= y) k = 1 else k = 0 
+
+frac(x) // 取小数部分
